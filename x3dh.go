@@ -1,4 +1,4 @@
-package main
+package pch
 
 import (
 	"crypto/ecdh"

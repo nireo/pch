@@ -11,11 +11,41 @@ import (
 type MessageKind byte
 
 const (
-	// TODO: add more message types
-	MessageKindText        MessageKind = 0x01
-	MessageKindKeyExchange MessageKind = 0x02
-	MessageKindJoin        MessageKind = 0x03
+	MessageKindText               MessageKind = 0x01
+	MessageKindKeyExchange        MessageKind = 0x02
+	MessageKindJoin               MessageKind = 0x03
+	MessageKindRegister           MessageKind = 0x04
+	MessageKindRegisterResponse   MessageKind = 0x05
+	MessageKindFetchBundle        MessageKind = 0x06
+	MessageKindBundleResponse     MessageKind = 0x07
+	MessageKindUploadOTPs         MessageKind = 0x08
+	MessageKindUploadOTPsResponse MessageKind = 0x09
+	MessageKindError              MessageKind = 0xFF
 )
+
+type UserRegistration struct {
+	Username       string
+	IdentityKey    []byte
+	VerifyingKey   []byte
+	SignedPrekey   StoredPrekey
+	OneTimePrekeys []StoredPrekey
+}
+
+type BundleRequest struct {
+	Username string
+}
+
+type PrekeyBundleResponse struct {
+	IdentityKey     []byte
+	SignedPrekey    []byte
+	PrekeySignature []byte
+	OneTimePrekey   []byte
+}
+
+type OTPUpload struct {
+	Username       string
+	OneTimePrekeys []StoredPrekey
+}
 
 // Message represents a message between two users
 type Message struct {

@@ -207,3 +207,47 @@ func (s *Storage) CountOTPs(username string) (int, error) {
 
 	return count, err
 }
+
+func (s *Storage) UserExists(username string) bool {
+	exists := false
+	s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(userBucket)
+		v := b.Get([]byte(username))
+		exists = (v != nil)
+		return nil
+	})
+
+	return exists
+}
+
+func (s *Storage) StoreUser(user *UserRecord) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(userBucket)
+
+		data, err := EncodeEntry(user)
+		if err != nil {
+			return fmt.Errorf("failed to encode user: %w", err)
+		}
+
+		return b.Put([]byte(user.Username), data)
+	})
+}
+
+func (s *Storage) GetUser(username string) (*UserRecord, error) {
+	var user UserRecord
+
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(userBucket)
+		v := b.Get([]byte(username))
+
+		if v == nil {
+			return fmt.Errorf("user not found: %s", username)
+		}
+
+		buf := bytes.NewBuffer(v)
+		dec := gob.NewDecoder(buf)
+		return dec.Decode(&user)
+	})
+
+	return &user, err
+}

@@ -90,10 +90,70 @@ func (s *Server) Run() {
 func (s *Server) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	msgConn := &MessageConn{
+	mc := &MessageConn{
 		conn: conn,
 		w:    bufio.NewWriter(conn),
 		r:    bufio.NewReader(conn),
 	}
 
+	data, err := mc.Recv()
+	if err != nil {
+		return
+	}
+
+	msg, err := DeserializeMessage(data)
+	if err != nil {
+		return
+	}
+
+	if msg.Kind != MessageKindJoin {
+		return
+	}
+
+	// TODO: add auth challenge for them to sign a message for authentication
+	client := &Client{
+		conn: mc,
+		id:   msg.SenderID,
+		send: make(chan *Message, 256),
+	}
+
+	s.register <- client
+	go s.readPump(client)
+	go s.writePump(client)
+}
+
+func (s *Server) readPump(client *Client) {
+	defer func() {
+		s.unregister <- client
+		client.conn.conn.Close()
+	}()
+
+	for {
+		data, err := client.conn.Recv()
+		if err != nil {
+			return
+		}
+
+		msg, err := DeserializeMessage(data)
+		if err != nil {
+			continue
+		}
+
+		s.broadcast <- msg
+	}
+}
+
+func (s *Server) writePump(client *Client) {
+	defer client.conn.conn.Close()
+
+	for msg := range client.send {
+		data, err := msg.Serialize()
+		if err != nil {
+			continue
+		}
+
+		if err := client.conn.Send(data); err != nil {
+			return
+		}
+	}
 }

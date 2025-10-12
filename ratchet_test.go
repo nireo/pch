@@ -112,7 +112,10 @@ func TestRatchetSendReceive(t *testing.T) {
 		t.Fatalf("Failed to create bundle: %v", err)
 	}
 
-	_, sharedSecret, err := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, err := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 	if err != nil {
 		t.Fatalf("Failed to create initial message: %v", err)
 	}
@@ -134,8 +137,14 @@ func TestRatchetSendReceive(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
 	additionalData := []byte("context")
 	message := "Hello Bob!"
@@ -163,11 +172,17 @@ func TestRatchetSendReceive(t *testing.T) {
 	}
 
 	if aliceRatchet.SendingCounter != 1 {
-		t.Errorf("Expected Alice's sending counter to be 1, got %d", aliceRatchet.SendingCounter)
+		t.Errorf(
+			"Expected Alice's sending counter to be 1, got %d",
+			aliceRatchet.SendingCounter,
+		)
 	}
 
 	if bobRatchet.ReceivingCounter != 1 {
-		t.Errorf("Expected Bob's receiving counter to be 1, got %d", bobRatchet.ReceivingCounter)
+		t.Errorf(
+			"Expected Bob's receiving counter to be 1, got %d",
+			bobRatchet.ReceivingCounter,
+		)
 	}
 }
 
@@ -192,7 +207,10 @@ func TestRatchetMultipleMessages(t *testing.T) {
 		t.Fatalf("Failed to create bundle: %v", err)
 	}
 
-	_, sharedSecret, err := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, err := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 	if err != nil {
 		t.Fatalf("Failed to create initial message: %v", err)
 	}
@@ -207,8 +225,14 @@ func TestRatchetMultipleMessages(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
 	additionalData := []byte("context")
 	messages := []string{"First", "Second", "Third", "Fourth"}
@@ -230,11 +254,19 @@ func TestRatchetMultipleMessages(t *testing.T) {
 	}
 
 	if aliceRatchet.SendingCounter != uint64(len(messages)) {
-		t.Errorf("Expected Alice's counter to be %d, got %d", len(messages), aliceRatchet.SendingCounter)
+		t.Errorf(
+			"Expected Alice's counter to be %d, got %d",
+			len(messages),
+			aliceRatchet.SendingCounter,
+		)
 	}
 
 	if bobRatchet.ReceivingCounter != uint64(len(messages)) {
-		t.Errorf("Expected Bob's counter to be %d, got %d", len(messages), bobRatchet.ReceivingCounter)
+		t.Errorf(
+			"Expected Bob's counter to be %d, got %d",
+			len(messages),
+			bobRatchet.ReceivingCounter,
+		)
 	}
 }
 
@@ -244,7 +276,10 @@ func TestRatchetDecryptionFail(t *testing.T) {
 
 	bob.GeneratePrekeys(true)
 	bobBundle, _ := bob.CreatePrekeyBundle()
-	_, sharedSecret, _ := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, _ := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 
 	aliceRatchet, _ := NewRatchetState()
 	bobRatchet, _ := NewRatchetState()
@@ -256,8 +291,14 @@ func TestRatchetDecryptionFail(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
 	additionalData := []byte("context")
 	encrypted, _ := aliceRatchet.Send("Secret message", additionalData)
@@ -276,7 +317,10 @@ func TestRatchetWrongAdditionalData(t *testing.T) {
 
 	bob.GeneratePrekeys(true)
 	bobBundle, _ := bob.CreatePrekeyBundle()
-	_, sharedSecret, _ := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, _ := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 
 	aliceRatchet, _ := NewRatchetState()
 	bobRatchet, _ := NewRatchetState()
@@ -288,10 +332,19 @@ func TestRatchetWrongAdditionalData(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
-	encrypted, _ := aliceRatchet.Send("Secret message", []byte("correct context"))
+	encrypted, _ := aliceRatchet.Send(
+		"Secret message",
+		[]byte("correct context"),
+	)
 
 	_, err := bobRatchet.Receive(encrypted, []byte("wrong context"))
 	if err == nil {
@@ -305,7 +358,10 @@ func TestRatchetEmptyMessage(t *testing.T) {
 
 	bob.GeneratePrekeys(true)
 	bobBundle, _ := bob.CreatePrekeyBundle()
-	_, sharedSecret, _ := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, _ := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 
 	aliceRatchet, _ := NewRatchetState()
 	bobRatchet, _ := NewRatchetState()
@@ -317,8 +373,14 @@ func TestRatchetEmptyMessage(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
 	additionalData := []byte("context")
 
@@ -343,7 +405,10 @@ func TestRatchetBidirectionalCommunication(t *testing.T) {
 
 	bob.GeneratePrekeys(true)
 	bobBundle, _ := bob.CreatePrekeyBundle()
-	_, sharedSecret, _ := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, _ := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 
 	aliceRatchet, _ := NewRatchetState()
 	bobRatchet, _ := NewRatchetState()
@@ -355,10 +420,22 @@ func TestRatchetBidirectionalCommunication(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeySending = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
-	_, aliceRatchet.ChainKeyReceiving = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeySending = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, aliceRatchet.ChainKeyReceiving = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
 	additionalData := []byte("context")
 
@@ -400,11 +477,17 @@ func TestRatchetMessageHeader(t *testing.T) {
 	}
 
 	if len(msg.Header.PublicKey) != 32 {
-		t.Errorf("Expected public key length 32, got %d", len(msg.Header.PublicKey))
+		t.Errorf(
+			"Expected public key length 32, got %d",
+			len(msg.Header.PublicKey),
+		)
 	}
 
 	if msg.Header.Counter != 0 {
-		t.Errorf("Expected counter 0 for first message, got %d", msg.Header.Counter)
+		t.Errorf(
+			"Expected counter 0 for first message, got %d",
+			msg.Header.Counter,
+		)
 	}
 
 	if len(msg.Header.Nonce) != 12 {
@@ -422,7 +505,10 @@ func TestRatchetCounterIncrement(t *testing.T) {
 
 	bob.GeneratePrekeys(true)
 	bobBundle, _ := bob.CreatePrekeyBundle()
-	_, sharedSecret, _ := alice.CreateInitialMessage(*bobBundle, []byte("Initial"))
+	_, sharedSecret, _ := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Initial"),
+	)
 
 	aliceRatchet, _ := NewRatchetState()
 	bobRatchet, _ := NewRatchetState()
@@ -434,8 +520,14 @@ func TestRatchetCounterIncrement(t *testing.T) {
 	bobRatchet.ReceivingPublicKey = aliceRatchet.SendingPublicKey
 
 	var emptySecret [32]byte
-	_, aliceRatchet.ChainKeySending = kdfRootKey(aliceRatchet.RootKey[:], emptySecret[:])
-	_, bobRatchet.ChainKeyReceiving = kdfRootKey(bobRatchet.RootKey[:], emptySecret[:])
+	_, aliceRatchet.ChainKeySending = kdfRootKey(
+		aliceRatchet.RootKey[:],
+		emptySecret[:],
+	)
+	_, bobRatchet.ChainKeyReceiving = kdfRootKey(
+		bobRatchet.RootKey[:],
+		emptySecret[:],
+	)
 
 	additionalData := []byte("context")
 
@@ -443,17 +535,27 @@ func TestRatchetCounterIncrement(t *testing.T) {
 		msg, _ := aliceRatchet.Send("test", additionalData)
 
 		if msg.Header.Counter != uint64(i) {
-			t.Errorf("Expected counter %d in header, got %d", i, msg.Header.Counter)
+			t.Errorf(
+				"Expected counter %d in header, got %d",
+				i,
+				msg.Header.Counter,
+			)
 		}
 
 		bobRatchet.Receive(msg, additionalData)
 	}
 
 	if aliceRatchet.SendingCounter != 5 {
-		t.Errorf("Expected Alice's counter to be 5, got %d", aliceRatchet.SendingCounter)
+		t.Errorf(
+			"Expected Alice's counter to be 5, got %d",
+			aliceRatchet.SendingCounter,
+		)
 	}
 
 	if bobRatchet.ReceivingCounter != 5 {
-		t.Errorf("Expected Bob's counter to be 5, got %d", bobRatchet.ReceivingCounter)
+		t.Errorf(
+			"Expected Bob's counter to be 5, got %d",
+			bobRatchet.ReceivingCounter,
+		)
 	}
 }

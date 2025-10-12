@@ -20,7 +20,8 @@ type PrekeyBundle struct {
 	OneTimePrekey   *ecdh.PublicKey // optional
 }
 
-// X3DHUser represents a user in the Extended Triple Diffie-Hellman key exchange.
+// X3DHUser represents a user in the Extended Triple Diffie-Hellman key
+// exchange.
 type X3DHUser struct {
 	// user's long-term identity keys these are permanent and used to
 	// identify the user.
@@ -44,10 +45,12 @@ type X3DHUser struct {
 	OneTimePrekeyPrivate *ecdh.PrivateKey
 	OneTimePrekeyPublic  *ecdh.PublicKey
 
-	// SigningKey is used to sign the SignedPrekeyPublic to prove it belongs to the user
+	// SigningKey is used to sign the SignedPrekeyPublic to prove it belongs to
+	// the user
 	SigningKey ed25519.PrivateKey
 
-	// Verifying key is shared to other people so that they can verify your signatures.
+	// Verifying key is shared to other people so that they can verify your
+	// signatures.
 	VerifyingKey ed25519.PublicKey
 
 	Username string
@@ -62,19 +65,25 @@ type InitialMessage struct {
 }
 
 // DH performs a Diffie-Hellman operation between a private and public key.
-func DH(privateKey *ecdh.PrivateKey, publicKey *ecdh.PublicKey) ([]byte, error) {
+func DH(
+	privateKey *ecdh.PrivateKey,
+	publicKey *ecdh.PublicKey,
+) ([]byte, error) {
 	return privateKey.ECDH(publicKey)
 }
 
 // KDF returns 32 bytes of output from the HKDF algorithm.
 //
-//   - hkdf input key material is the input key material = F || KM where KM is an
-//     input byte sequence and F is a byte sequence containing 32 0xFF bytes if curve
-//     is X25519, and 57 0xFF bytes if curve is X448.
-//   - hkdf salt = A zero-filled byte sequence with length equal to the hash output length
+// - hkdf input key material is the input key material = F || KM where KM is an
+// input byte sequence and F is a byte sequence containing 32 0xFF bytes if
+// curve is X25519, and 57 0xFF bytes if curve is X448.
+//
+// - hkdf salt = A zero-filled byte sequence with length equal to the hash
+// output length
 //   - hkdf info = An application-specific byte sequence.
 func KDF(km []byte, info string) ([]byte, error) {
-	// HKDF salt = A zero-filled byte sequence with length equal to the hash output length
+	// HKDF salt = A zero-filled byte sequence with length equal to the hash
+	// output length
 	hash := sha256.New
 	keyLen := hash().Size()
 	salt := make([]byte, keyLen)         // SHA-256 output length is 32 bytes
@@ -128,9 +137,9 @@ func (u *X3DHUser) GenerateEphemeralKey() error {
 	return nil
 }
 
-// CreatePrekeyBundle creates a new prekey bundle from the user with the user's identity key
-// signed prekey and a signature of the public signed prekey signed with the private signing
-// key.
+// CreatePrekeyBundle creates a new prekey bundle from the user with the user's
+// identity key signed prekey and a signature of the public signed prekey signed
+// with the private signing key.
 func (u *X3DHUser) CreatePrekeyBundle() (*PrekeyBundle, error) {
 	if u.SignedPrekeyPublic == nil {
 		return nil, fmt.Errorf("no signed prekey to available")
@@ -145,8 +154,8 @@ func (u *X3DHUser) CreatePrekeyBundle() (*PrekeyBundle, error) {
 	}, nil
 }
 
-// GeneratePrekeys generates a public and private signed prekey. It will also optionally
-// create a one-time prekey.
+// GeneratePrekeys generates a public and private signed prekey. It will also
+// optionally create a one-time prekey.
 func (u *X3DHUser) GeneratePrekeys(oneTime bool) error {
 	curve := ecdh.X25519()
 
@@ -170,26 +179,36 @@ func (u *X3DHUser) GeneratePrekeys(oneTime bool) error {
 	return nil
 }
 
-// calculateSharedSecret does the Diffie-Hellman key exchange between the given keys.
+// calculateSharedSecret does the Diffie-Hellman key exchange between the given
+// keys.
 // DH_1(a.IdentityPrivateKey, b.SignedPrekey)
 // DH_2(a.EphemeralPrivateKey, b.IdentityKey)
 // DH_3(a.EphemeralPrivateKey, b.SignedPrekey)
-// and optionally DH_4(a.EphemeralPrivateKey, b.OneTimePrekey) if the other prekey
-// bundle contains a one-time prekey.
+// and optionally DH_4(a.EphemeralPrivateKey, b.OneTimePrekey) if the other
+// prekey bundle contains a one-time prekey.
 func (u *X3DHUser) calculateSharedSecret(other PrekeyBundle) ([]byte, error) {
 	dh1, err := DH(u.IdentityPrivateKey, other.SignedPrekey)
 	if err != nil {
-		return nil, fmt.Errorf("DH(own.IdentityKey, other.SignedPrekey) failed: %s", err)
+		return nil, fmt.Errorf(
+			"DH(own.IdentityKey, other.SignedPrekey) failed: %s",
+			err,
+		)
 	}
 
 	dh2, err := DH(u.EphemeralPrivateKey, other.IdentityKey)
 	if err != nil {
-		return nil, fmt.Errorf("DH(own.EphemeralKey, other.IdentityKey) failed: %s", err)
+		return nil, fmt.Errorf(
+			"DH(own.EphemeralKey, other.IdentityKey) failed: %s",
+			err,
+		)
 	}
 
 	dh3, err := DH(u.EphemeralPrivateKey, other.SignedPrekey)
 	if err != nil {
-		return nil, fmt.Errorf("DH(own.EphemeralKey, other.SignedPrekey) failed: %s", err)
+		return nil, fmt.Errorf(
+			"DH(own.EphemeralKey, other.SignedPrekey) failed: %s",
+			err,
+		)
 	}
 
 	dh1 = append(dh1, dh2...)
@@ -198,7 +217,10 @@ func (u *X3DHUser) calculateSharedSecret(other PrekeyBundle) ([]byte, error) {
 	if other.OneTimePrekey != nil {
 		dh4, err := DH(u.EphemeralPrivateKey, other.OneTimePrekey)
 		if err != nil {
-			return nil, fmt.Errorf("DH(own.EphemeralKey, other.OneTimePrekey) failed: %s", err)
+			return nil, fmt.Errorf(
+				"DH(own.EphemeralKey, other.OneTimePrekey) failed: %s",
+				err,
+			)
 		}
 
 		dh1 = append(dh1, dh4...)
@@ -217,40 +239,59 @@ func (u *X3DHUser) calculateSharedSecret(other PrekeyBundle) ([]byte, error) {
 	return sharedSecret, nil
 }
 
-// additionalInformation constructs a byte slice with the user's private identity key
-// the other public key and the user's username.
+// additionalInformation constructs a byte slice with the user's private
+// identity key the other public key and the user's username.
 func (u *X3DHUser) additionalInformation(other *ecdh.PublicKey) []byte {
 	ad := append(u.IdentityPublicKey.Bytes(), other.Bytes()...)
 	ad = append(ad, []byte(u.Username)...)
 	return ad
 }
 
-// calculateSharedSecretAsReceiver takes in the initial message constructed by the other user.
-// it performs the same Diffie-Hellman key exchange as the [[calculateSharedSecret]] method
-func (u *X3DHUser) calculateSharedSecretAsReceiver(msg *InitialMessage) ([]byte, error) {
+// calculateSharedSecretAsReceiver takes in the initial message constructed by
+// the other user. it performs the same Diffie-Hellman key exchange as the
+// [[calculateSharedSecret]] method
+func (u *X3DHUser) calculateSharedSecretAsReceiver(
+	msg *InitialMessage,
+) ([]byte, error) {
 	dh1, err := DH(u.SignedPrekeyPrivate, msg.IdentityKey)
 	if err != nil {
-		return nil, fmt.Errorf("DH(own.SignedPrekey, other.IdentityKey) failed: %s", err)
+		return nil, fmt.Errorf(
+			"DH(own.SignedPrekey, other.IdentityKey) failed: %s",
+			err,
+		)
 	}
 	dh2, err := DH(u.IdentityPrivateKey, msg.EphemeralKey)
 	if err != nil {
-		return nil, fmt.Errorf("DH(own.IdentityKey, other.EphemeralKey) failed: %s", err)
+		return nil, fmt.Errorf(
+			"DH(own.IdentityKey, other.EphemeralKey) failed: %s",
+			err,
+		)
 	}
 	dh3, err := DH(u.SignedPrekeyPrivate, msg.EphemeralKey)
 	if err != nil {
-		return nil, fmt.Errorf("DH(own.SignedPrekey, other.EphemeralKey) failed: %s", err)
+		return nil, fmt.Errorf(
+			"DH(own.SignedPrekey, other.EphemeralKey) failed: %s",
+			err,
+		)
 	}
 
 	dh1 = append(dh1, dh2...)
 	dh1 = append(dh1, dh3...)
 
-	// if the message used a one-time prekey, and the user's private one-time prekey is nil nil
+	// if the message used a one-time prekey, and the user's private one-time
+	// prekey is nil nil
 	// we take that into account.
 	if msg.OneTimePrekeyUsed != nil && u.OneTimePrekeyPrivate != nil {
-		if slices.Equal(msg.OneTimePrekeyUsed.Bytes(), u.OneTimePrekeyPublic.Bytes()) {
+		if slices.Equal(
+			msg.OneTimePrekeyUsed.Bytes(),
+			u.OneTimePrekeyPublic.Bytes(),
+		) {
 			dh4, err := DH(u.OneTimePrekeyPrivate, msg.EphemeralKey)
 			if err != nil {
-				return nil, fmt.Errorf("DH(own.OneTimePrekey, other.EphemeralKey) failed: %s", err)
+				return nil, fmt.Errorf(
+					"DH(own.OneTimePrekey, other.EphemeralKey) failed: %s",
+					err,
+				)
 			}
 			dh1 = append(dh1, dh4...)
 
@@ -267,16 +308,23 @@ func (u *X3DHUser) calculateSharedSecretAsReceiver(msg *InitialMessage) ([]byte,
 	return sharedSecret, nil
 }
 
-// CreateInitialMessage create initial message constructs a initial message with this user's information
-// and another user's prekey buundle. This function generates a ephemeral private key if one exists and
-// then calculates the shared secret.
+// CreateInitialMessage create initial message constructs a initial message with
+// this user's information and another user's prekey buundle. This function
+// generates a ephemeral private key if one exists and then calculates the
+// shared secret.
 //
-// This initial message can then be used by another user with the calculateSharedSecretAsReceiver to
-// finalize the process.
-func (u *X3DHUser) CreateInitialMessage(bundle PrekeyBundle, payload []byte) (*InitialMessage, []byte, error) {
+// This initial message can then be used by another user with the
+// calculateSharedSecretAsReceiver to finalize the process.
+func (u *X3DHUser) CreateInitialMessage(
+	bundle PrekeyBundle,
+	payload []byte,
+) (*InitialMessage, []byte, error) {
 	if u.EphemeralPrivateKey == nil {
 		if err := u.GenerateEphemeralKey(); err != nil {
-			return nil, nil, fmt.Errorf("failed to generate ephemeral key: %s", err)
+			return nil, nil, fmt.Errorf(
+				"failed to generate ephemeral key: %s",
+				err,
+			)
 		}
 	}
 
@@ -296,8 +344,15 @@ func (u *X3DHUser) CreateInitialMessage(bundle PrekeyBundle, payload []byte) (*I
 	return msg, sharedSecret, nil
 }
 
-// verifyPrekeySignature takes in a prekey bundle and a given verifying key and checks that the
-// given signature is a valid message from the public key.
-func verifyPrekeySignature(bundle PrekeyBundle, verifyingKey ed25519.PublicKey) bool {
-	return ed25519.Verify(verifyingKey, bundle.SignedPrekey.Bytes(), bundle.PrekeySignature)
+// verifyPrekeySignature takes in a prekey bundle and a given verifying key and
+// checks that the given signature is a valid message from the public key.
+func verifyPrekeySignature(
+	bundle PrekeyBundle,
+	verifyingKey ed25519.PublicKey,
+) bool {
+	return ed25519.Verify(
+		verifyingKey,
+		bundle.SignedPrekey.Bytes(),
+		bundle.PrekeySignature,
+	)
 }

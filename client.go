@@ -264,7 +264,7 @@ func (c *ChatClient) handleKeyExchange(msg *Message) {
 	ratchet, _ := NewRatchetState()
 	copy(ratchet.RootKey[:], sharedSecret)
 
-	ad, _ := c.User.additionalInformation(initMsg.IdentityKey)
+	ad := c.User.additionalInformation(initMsg.IdentityKey)
 
 	c.mu.Lock()
 	c.conversations[msg.SenderID] = &Conversation{
@@ -304,7 +304,7 @@ func (c *ChatClient) InitiateChat(recipientID string, bundle PrekeyBundle) error
 	ratchet, _ := NewRatchetState()
 	copy(ratchet.RootKey[:], sharedSecret)
 
-	ad, _ := c.User.additionalInformation(bundle.IdentityKey)
+	ad := c.User.additionalInformation(bundle.IdentityKey)
 
 	c.mu.Lock()
 	c.conversations[recipientID] = &Conversation{

@@ -1,0 +1,127 @@
+syntax = "proto3";
+package pch;
+option go_package = "github.com/nireo/pch/proto";
+
+import "google/protobuf/timestamp.proto";
+
+service ChatService {
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  rpc UploadOTPs(UploadOTPsRequest) returns (UploadOTPsResponse);
+  
+  rpc FetchBundle(FetchBundleRequest) returns (FetchBundleResponse);
+  
+  rpc MessageStream(stream ClientMessage) returns (stream ServerMessage);
+}
+
+
+message RegisterRequest {
+  string username = 1;
+  bytes identity_key = 2;
+  bytes verifying_key = 3;
+  SignedPrekey signed_prekey = 4;
+  repeated SignedPrekey one_time_prekeys = 5;
+}
+
+message RegisterResponse {
+  string message = 1;
+}
+
+message SignedPrekey {
+  bytes public_key = 1;
+  bytes signature = 2; 
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message UploadOTPsRequest {
+  string username = 1;
+  repeated SignedPrekey one_time_prekeys = 2;
+}
+
+message UploadOTPsResponse {
+  int32 uploaded_count = 1;
+  int32 total_otps = 2;
+}
+
+message FetchBundleRequest {
+  string username = 1;
+}
+
+message FetchBundleResponse {
+  string username = 1;
+  PrekeyBundle bundle = 2;
+}
+
+message PrekeyBundle {
+  bytes identity_key = 1;
+  bytes signed_prekey = 2;
+  bytes prekey_signature = 3;
+  optional bytes one_time_prekey = 4;
+}
+
+message ClientMessage {
+  oneof message_type {
+    JoinRequest join = 1;
+    KeyExchangeMessage key_exchange = 2;
+    EncryptedMessage encrypted_message = 3;
+    HeartbeatMessage heartbeat = 4;
+  }
+}
+
+message ServerMessage {
+  oneof message_type {
+    JoinResponse join_response = 1;
+    KeyExchangeMessage key_exchange = 2;
+    EncryptedMessage encrypted_message = 3;
+    HeartbeatMessage heartbeat = 4;
+  }
+}
+
+message JoinRequest {
+  string username = 1;
+}
+
+message JoinResponse {
+  string message = 1;
+  google.protobuf.Timestamp timestamp = 2;
+}
+
+message KeyExchangeMessage {
+  string sender_id = 1;
+  string receiver_id = 2;
+  InitialMessage initial_message = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message InitialMessage {
+  bytes identity_key = 1;
+  bytes ephemeral_key = 2;
+  bytes signed_prekey = 3;
+  optional bytes one_time_prekey = 4;
+}
+
+message EncryptedMessage {
+  string sender_id = 1;
+  string receiver_id = 2;
+  RatchetMessage ratchet_message = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message RatchetMessage {
+  bytes public_key = 1;
+  int32 previous_chain_length = 2;
+  int32 message_number = 3;
+  bytes ciphertext = 4;
+}
+
+message HeartbeatMessage {
+  google.protobuf.Timestamp timestamp = 1;
+}
+
+message UserRecord {
+  string username = 1;
+  bytes identity_key = 2;
+  bytes verifying_key = 3;
+  SignedPrekey signed_prekey = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp last_seen = 6;
+}

@@ -6,6 +6,8 @@ import (
 	"encoding/gob"
 	"io"
 	"net"
+
+	pb "github.com/nireo/pch/pb"
 )
 
 type MessageKind byte
@@ -27,8 +29,8 @@ type UserRegistration struct {
 	Username       string
 	IdentityKey    []byte
 	VerifyingKey   []byte
-	SignedPrekey   StoredPrekey
-	OneTimePrekeys []StoredPrekey
+	SignedPrekey   *pb.SignedPrekey
+	OneTimePrekeys []*pb.SignedPrekey
 }
 
 type BundleRequest struct {
@@ -40,11 +42,12 @@ type PrekeyBundleResponse struct {
 	SignedPrekey    []byte
 	PrekeySignature []byte
 	OneTimePrekey   []byte
+	Username        string
 }
 
 type OTPUpload struct {
 	Username       string
-	OneTimePrekeys []StoredPrekey
+	OneTimePrekeys []*pb.SignedPrekey
 }
 
 // Message represents a message between two users

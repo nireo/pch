@@ -157,7 +157,11 @@ func (s *Server) handleRegistration(mc *MessageConn, msg *Message) {
 		return
 	}
 
-	if !ed25519.Verify(userReg.VerifyingKey, userReg.SignedPrekey.PublicKey, userReg.SignedPrekey.Signature) {
+	if !ed25519.Verify(
+		userReg.VerifyingKey,
+		userReg.SignedPrekey.PublicKey,
+		userReg.SignedPrekey.Signature,
+	) {
 		s.sendError(mc, "Invalid prekey signature")
 		return
 	}
@@ -171,7 +175,7 @@ func (s *Server) handleRegistration(mc *MessageConn, msg *Message) {
 		Username:     userReg.Username,
 		IdentityKey:  userReg.IdentityKey,
 		VerifyingKey: userReg.VerifyingKey,
-		SignedPrekey: &userReg.SignedPrekey,
+		SignedPrekey: userReg.SignedPrekey,
 		CreatedAt:    time.Now(),
 	}
 
@@ -196,7 +200,11 @@ func (s *Server) handleRegistration(mc *MessageConn, msg *Message) {
 	data, _ := response.Serialize()
 	mc.Send(data)
 
-	fmt.Printf("User registered: %s (with %d OTPs)\n", userReg.Username, len(userReg.OneTimePrekeys))
+	fmt.Printf(
+		"User registered: %s (with %d OTPs)\n",
+		userReg.Username,
+		len(userReg.OneTimePrekeys),
+	)
 }
 
 func (s *Server) readPump(client *Client) {
@@ -238,12 +246,14 @@ func (s *Server) handleFetchBundle(client *Client, msg *Message) {
 
 	userRecord, err := s.storage.GetUser(request.Username)
 	if err != nil {
-		s.sendErrorToClient(client, fmt.Sprintf("User not found: %s", request.Username))
+		s.sendErrorToClient(
+			client,
+			fmt.Sprintf("User not found: %s", request.Username),
+		)
 		return
 	}
 
-	var otp *StoredPrekey
-	otp, err = s.storage.PopOTP(request.Username)
+	otp, err := s.storage.PopOTP(request.Username)
 	if err != nil {
 		fmt.Printf("No OTPs available for %s\n", request.Username)
 	}
@@ -252,11 +262,16 @@ func (s *Server) handleFetchBundle(client *Client, msg *Message) {
 		IdentityKey:     userRecord.IdentityKey,
 		SignedPrekey:    userRecord.SignedPrekey.PublicKey,
 		PrekeySignature: userRecord.SignedPrekey.Signature,
+		Username:        request.Username,
 	}
 
 	if otp != nil {
 		bundle.OneTimePrekey = otp.PublicKey
-		fmt.Printf("Provided OTP for %s (remaining: %d)\n", request.Username, s.mustCountOTPs(request.Username))
+		fmt.Printf(
+			"Provided OTP for %s (remaining: %d)\n",
+			request.Username,
+			s.mustCountOTPs(request.Username),
+		)
 	}
 
 	var buf bytes.Buffer
@@ -296,28 +311,41 @@ func (s *Server) handleUploadOTPs(client *Client, msg *Message) {
 	}
 
 	for _, otp := range upload.OneTimePrekeys {
-		if !ed25519.Verify(userRecord.VerifyingKey, otp.PublicKey, otp.Signature) {
+		if !ed25519.Verify(
+			userRecord.VerifyingKey,
+			otp.PublicKey,
+			otp.Signature,
+		) {
 			s.sendErrorToClient(client, "Invalid OTP signature")
 			return
 		}
 	}
 
 	if err := s.storage.AddOTPs(upload.Username, upload.OneTimePrekeys); err != nil {
-		s.sendErrorToClient(client, fmt.Sprintf("Failed to store OTPs: %v", err))
+		s.sendErrorToClient(
+			client,
+			fmt.Sprintf("Failed to store OTPs: %v", err),
+		)
 		return
 	}
 
 	response := &Message{
 		Kind:       MessageKindUploadOTPsResponse,
 		ReceiverID: client.id,
-		Payload:    []byte(fmt.Sprintf("Uploaded %d OTPs", len(upload.OneTimePrekeys))),
+		Payload: []byte(
+			fmt.Sprintf("Uploaded %d OTPs", len(upload.OneTimePrekeys)),
+		),
 	}
 
 	data, _ := response.Serialize()
 	client.conn.Send(data)
 
-	fmt.Printf("User %s uploaded %d OTPs (total: %d)\n",
-		upload.Username, len(upload.OneTimePrekeys), s.mustCountOTPs(upload.Username))
+	fmt.Printf(
+		"User %s uploaded %d OTPs (total: %d)\n",
+		upload.Username,
+		len(upload.OneTimePrekeys),
+		s.mustCountOTPs(upload.Username),
+	)
 }
 
 func (s *Server) writePump(client *Client) {

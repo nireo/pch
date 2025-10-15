@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	pb "github.com/nireo/pch/pb"
@@ -52,7 +51,7 @@ func (r *RpcServer) Register(
 		Username:     req.Username,
 		IdentityKey:  req.IdentityKey,
 		VerifyingKey: req.VerifyingKey,
-		SignedPrekey: convertPbSignedPrekeyToInteral(req.SignedPrekey),
+		SignedPrekey: req.SignedPrekey,
 		CreatedAt:    time.Now(),
 	}
 
@@ -76,8 +75,7 @@ func (r *RpcServer) FetchBundle(
 		return nil, fmt.Errorf("user not found: %s", req.Username)
 	}
 
-	var otp *StoredPrekey
-	otp, err = r.store.PopOTP(req.Username)
+	otp, err := r.store.PopOTP(req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("no more otps available for user")
 	}
@@ -118,13 +116,7 @@ func (r *RpcServer) UploadOPTs(
 		}
 	}
 
-	// TOOD: also this is so bad
-	converted := make([]StoredPrekey, len(req.OneTimePrekeys))
-	for i, val := range req.OneTimePrekeys {
-		converted[i] = *convertPbSignedPrekeyToInteral(val)
-	}
-
-	if err := r.store.AddOTPs(req.Username, converted); err != nil {
+	if err := r.store.AddOTPs(req.Username, req.OneTimePrekeys); err != nil {
 		return nil, fmt.Errorf("failed to store otps", err)
 	}
 
@@ -137,11 +129,4 @@ func (r *RpcServer) UploadOPTs(
 		UploadedCount: int32(len(req.OneTimePrekeys)),
 		TotalOtps:     int32(totalNow),
 	}, nil
-}
-
-func convertPbSignedPrekeyToInteral(key *pb.SignedPrekey) *StoredPrekey {
-	return &StoredPrekey{
-		PublicKey: key.PublicKey,
-		Signature: key.Signature,
-	}
 }

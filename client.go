@@ -11,6 +11,9 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	pb "github.com/nireo/pch/pb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type ChatClient struct {
@@ -40,28 +43,14 @@ func NewChatClient(serverAddr, username string) (*ChatClient, error) {
 	}
 
 	client := &ChatClient{
-		conn:          mc,
-		id:            username,
-		User:          user,
-		conversations: make(map[string]*Conversation),
+		conn:           mc,
+		id:             username,
+		User:           user,
+		conversations:  make(map[string]*Conversation),
+		bundleRequests: make(map[string]chan *PrekeyBundle),
 	}
-
-	joinMsg := &Message{
-		Kind:     MessageKindJoin,
-		SenderID: username,
-	}
-
-	data, err := joinMsg.Serialize()
-	if err != nil {
-		return nil, err
-	}
-
-	err = mc.Send(data)
-	if err != nil {
-		return nil, nil
-	}
-
 	go client.readMessages()
+
 	return client, nil
 }
 
@@ -70,14 +59,17 @@ func (c *ChatClient) Register() error {
 		return fmt.Errorf("failed to generate prekeys", err)
 	}
 
-	signedPrekey := StoredPrekey{
+	signedPrekey := &pb.SignedPrekey{
 		PublicKey: c.User.SignedPrekeyPublic.Bytes(),
-		Signature: ed25519.Sign(c.User.SigningKey, c.User.SignedPrekeyPublic.Bytes()),
-		CreatedAt: time.Now(),
+		Signature: ed25519.Sign(
+			c.User.SigningKey,
+			c.User.SignedPrekeyPublic.Bytes(),
+		),
+		CreatedAt: timestamppb.Now(),
 	}
 
 	// generate many otps
-	otps := make([]StoredPrekey, 100)
+	otps := make([]*pb.SignedPrekey, 100)
 	curve := ecdh.X25519()
 
 	for i := range 100 {
@@ -86,10 +78,13 @@ func (c *ChatClient) Register() error {
 			return fmt.Errorf("failed to generate OTP: %w", err)
 		}
 
-		otps[i] = StoredPrekey{
+		otps[i] = &pb.SignedPrekey{
 			PublicKey: otpPriv.PublicKey().Bytes(),
-			Signature: ed25519.Sign(c.User.SigningKey, otpPriv.PublicKey().Bytes()),
-			CreatedAt: time.Now(),
+			Signature: ed25519.Sign(
+				c.User.SigningKey,
+				otpPriv.PublicKey().Bytes(),
+			),
+			CreatedAt: timestamppb.Now(),
 		}
 	}
 
@@ -159,7 +154,7 @@ func (c *ChatClient) FetchBundle(username string) (*PrekeyBundle, error) {
 	}
 
 	if err := c.conn.Send(data); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to send bundle request: %w", err)
 	}
 
 	return c.waitForBundle(username)
@@ -211,15 +206,22 @@ func (c *ChatClient) handleBundleResponse(msg *Message) {
 		bundle.OneTimePrekey = oneTimePrekey
 	}
 
+	// You need to know which username this bundle is for!
+	// This information should be in the BundleRequest or tracked somehow
+	// For now, if there's only one pending request, send to it:
 	c.mu.Lock()
-	if c.bundleRequests != nil {
+	if c.bundleRequests != nil && len(c.bundleRequests) > 0 {
+		// If you can determine the username from the response, use:
+		// if ch, ok := c.bundleRequests[username]; ok {
+		//     ch <- bundle
+		//     delete(c.bundleRequests, username)
+		// }
+
+		// Otherwise, for single request:
 		for username, ch := range c.bundleRequests {
-			select {
-			case ch <- bundle:
-				delete(c.bundleRequests, username)
-			default:
-			}
-			break
+			ch <- bundle
+			delete(c.bundleRequests, username)
+			break // Only send to ONE request
 		}
 	}
 	c.mu.Unlock()
@@ -250,7 +252,9 @@ func (c *ChatClient) handleMessage(msg *Message) {
 	case MessageKindBundleResponse:
 		c.handleBundleResponse(msg)
 	case MessageKindError:
-		fmt.Printf("Error from server: %s\n", string(msg.Payload))
+		fmt.Printf("error from server: %s\n", string(msg.Payload))
+	default:
+		fmt.Printf("unknown message kind: %v\n", msg.Kind)
 	}
 }
 
@@ -259,7 +263,7 @@ func (c *ChatClient) handleKeyExchange(msg *Message) {
 	buf := bytes.NewBuffer(msg.Payload)
 	gob.NewDecoder(buf).Decode(&initMsg)
 
-	sharedSecret, _ := c.User.calculateSharedSecretAsReceiver(initMsg)
+	sharedSecret, _ := c.User.calculateSharedSecretAsReceiver(&initMsg)
 
 	ratchet, _ := NewRatchetState()
 	copy(ratchet.RootKey[:], sharedSecret)
@@ -293,7 +297,10 @@ func (c *ChatClient) handleTextMessage(msg *Message) {
 	fmt.Printf("[%s]: %s\n", msg.SenderID, plaintext)
 }
 
-func (c *ChatClient) InitiateChat(recipientID string, bundle PrekeyBundle) error {
+func (c *ChatClient) InitiateChat(
+	recipientID string,
+	bundle PrekeyBundle,
+) error {
 	c.User.GenerateEphemeralKey()
 
 	initMsg, sharedSecret, err := c.User.CreateInitialMessage(bundle, nil)
@@ -364,4 +371,31 @@ func (c *ChatClient) SendMessage(recipientID, text string) error {
 
 	data, _ := msg.Serialize()
 	return c.conn.Send(data)
+}
+
+func (c *ChatClient) Join() error {
+	joinMsg := &Message{
+		Kind:     MessageKindJoin,
+		SenderID: c.id,
+	}
+	data, _ := joinMsg.Serialize()
+	return c.conn.Send(data)
+}
+
+func (c *ChatClient) HasConversation(recipientID string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, ok := c.conversations[recipientID]
+	return ok
+}
+
+func (c *ChatClient) ListConversations() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	convs := make([]string, 0, len(c.conversations))
+	for id := range c.conversations {
+		convs = append(convs, id)
+	}
+	return convs
 }

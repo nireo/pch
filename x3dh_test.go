@@ -33,7 +33,11 @@ func TestNewX3DFUser(t *testing.T) {
 	}
 
 	if len(user.SigningKey) != ed25519.PrivateKeySize {
-		t.Errorf("Expected signing key size %d, got %d", ed25519.PrivateKeySize, len(user.SigningKey))
+		t.Errorf(
+			"Expected signing key size %d, got %d",
+			ed25519.PrivateKeySize,
+			len(user.SigningKey),
+		)
 	}
 }
 
@@ -135,7 +139,11 @@ func TestCreatePrekeyBundle(t *testing.T) {
 		t.Error("Bundle one-time prekey should not be nil when generated")
 	}
 
-	if !ed25519.Verify(user.VerifyingKey, bundle.SignedPrekey.Bytes(), bundle.PrekeySignature) {
+	if !ed25519.Verify(
+		user.VerifyingKey,
+		bundle.SignedPrekey.Bytes(),
+		bundle.PrekeySignature,
+	) {
 		t.Error("Prekey signature verification failed")
 	}
 }
@@ -187,7 +195,10 @@ func TestX3DHKeyAgreement(t *testing.T) {
 		t.Fatalf("Failed to create Bob's bundle: %v", err)
 	}
 
-	initialMsg, aliceSecret, err := alice.CreateInitialMessage(*bobBundle, []byte("Hello Bob!"))
+	initialMsg, aliceSecret, err := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Hello Bob!"),
+	)
 	if err != nil {
 		t.Fatalf("Failed to create initial message: %v", err)
 	}
@@ -204,7 +215,7 @@ func TestX3DHKeyAgreement(t *testing.T) {
 		t.Error("Initial message payload should not be empty")
 	}
 
-	bobSecret, err := bob.calculateSharedSecretAsReceiver(*initialMsg)
+	bobSecret, err := bob.calculateSharedSecretAsReceiver(initialMsg)
 	if err != nil {
 		t.Fatalf("Failed to calculate Bob's shared secret: %v", err)
 	}
@@ -218,7 +229,9 @@ func TestX3DHKeyAgreement(t *testing.T) {
 	}
 
 	if alice.EphemeralPrivateKey != nil {
-		t.Error("Alice's ephemeral private key should be deleted after key agreement")
+		t.Error(
+			"Alice's ephemeral private key should be deleted after key agreement",
+		)
 	}
 }
 
@@ -243,12 +256,15 @@ func TestX3DHKeyAgreementWithoutOneTimePrekey(t *testing.T) {
 		t.Fatalf("Failed to create Bob's bundle: %v", err)
 	}
 
-	initialMsg, aliceSecret, err := alice.CreateInitialMessage(*bobBundle, []byte("Hello Bob!"))
+	initialMsg, aliceSecret, err := alice.CreateInitialMessage(
+		*bobBundle,
+		[]byte("Hello Bob!"),
+	)
 	if err != nil {
 		t.Fatalf("Failed to create initial message: %v", err)
 	}
 
-	bobSecret, err := bob.calculateSharedSecretAsReceiver(*initialMsg)
+	bobSecret, err := bob.calculateSharedSecretAsReceiver(initialMsg)
 	if err != nil {
 		t.Fatalf("Failed to calculate Bob's shared secret: %v", err)
 	}

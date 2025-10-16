@@ -56,7 +56,7 @@ func NewChatClient(serverAddr, username string) (*ChatClient, error) {
 
 func (c *ChatClient) Register() error {
 	if err := c.User.GeneratePrekeys(true); err != nil {
-		return fmt.Errorf("failed to generate prekeys", err)
+		return fmt.Errorf("failed to generate prekeys, %v", err)
 	}
 
 	signedPrekey := &pb.SignedPrekey{

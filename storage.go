@@ -121,7 +121,7 @@ func (s *Storage) AddOTPs(username string, prekeys []*pb.SignedPrekey) error {
 }
 
 func (s *Storage) PopOTP(username string) (*pb.SignedPrekey, error) {
-	var prekey *pb.SignedPrekey
+	prekey := &pb.SignedPrekey{}
 
 	err := s.db.Update(func(tx *bolt.Tx) error {
 		otpsBucket := tx.Bucket(otpBucket)

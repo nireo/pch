@@ -117,7 +117,7 @@ func (r *RpcServer) UploadOPTs(
 	}
 
 	if err := r.store.AddOTPs(req.Username, req.OneTimePrekeys); err != nil {
-		return nil, fmt.Errorf("failed to store otps", err)
+		return nil, fmt.Errorf("failed to store otps %v", err)
 	}
 
 	totalNow, err := r.store.CountOTPs(req.Username)

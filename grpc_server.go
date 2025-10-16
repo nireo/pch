@@ -5,16 +5,22 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"sync"
 	"time"
 
 	pb "github.com/nireo/pch/pb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var ErrInvalidPrekeySignature = errors.New("invalid prekey signature")
 
 type RpcServer struct {
 	pb.UnimplementedChatServiceServer
-	store *Storage
+	store         *Storage
+	activeStreams map[string]pb.ChatService_MessageStreamServer // username -> stream
+	mu            sync.RWMutex
 }
 
 func NewRpcServer(dbPath string) (*RpcServer, error) {
@@ -24,7 +30,8 @@ func NewRpcServer(dbPath string) (*RpcServer, error) {
 	}
 
 	return &RpcServer{
-		store: storage,
+		store:         storage,
+		activeStreams: make(map[string]pb.ChatService_MessageStreamServer),
 	}, nil
 }
 
@@ -60,7 +67,10 @@ func (r *RpcServer) Register(
 	}
 
 	if len(req.OneTimePrekeys) > 0 {
-		// TODO: just use the pb keys to prevent copying and other stupid shit
+		err := r.store.AddOTPs(req.Username, req.OneTimePrekeys)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add prekeys %v", err)
+		}
 	}
 
 	return &pb.RegisterResponse{}, nil
@@ -99,8 +109,6 @@ func (r *RpcServer) UploadOPTs(
 	ctx context.Context,
 	req *pb.UploadOTPsRequest,
 ) (*pb.UploadOTPsResponse, error) {
-	// TODO: authenticate the user using the keys
-
 	userRecord, err := r.store.GetUser(req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("error getting user: %v", err)
@@ -129,4 +137,156 @@ func (r *RpcServer) UploadOPTs(
 		UploadedCount: int32(len(req.OneTimePrekeys)),
 		TotalOtps:     int32(totalNow),
 	}, nil
+}
+
+func (r *RpcServer) Close() error {
+	return r.store.Close()
+}
+
+func (r *RpcServer) handleMessage(msg *pb.ClientMessage) error {
+	switch v := msg.MessageType.(type) {
+	case *pb.ClientMessage_Join:
+		// todo
+	case *pb.ClientMessage_EncryptedMessage:
+		// todo
+	case *pb.ClientMessage_Heartbeat:
+		// todo
+	case *pb.ClientMessage_KeyExchange:
+		// todo
+	default:
+		return fmt.Errorf("unknown message type: %T", v)
+	}
+	return nil
+}
+
+// MessageStream handles the bidirectional streaming RPC for chat messages.
+func (r *RpcServer) MessageStream(
+	stream pb.ChatService_MessageStreamServer,
+) error {
+	var username string
+	var streamRegistered bool
+
+	log.Println("stream connection initiated")
+
+	defer func() {
+		if streamRegistered {
+			r.mu.Lock()
+			delete(r.activeStreams, username)
+			r.mu.Unlock()
+			log.Printf("stream closed for user: %s", username)
+		}
+	}()
+
+	for {
+		msg, err := stream.Recv()
+		if err == io.EOF {
+			log.Printf("client closed stream normally: %s", username)
+			return nil
+		}
+
+		if err != nil {
+			log.Printf("stream error for user %s: %v", username, err)
+			return err
+		}
+
+		switch v := msg.MessageType.(type) {
+		case *pb.ClientMessage_Join:
+			username = v.Join.Username
+
+			r.mu.Lock()
+			r.activeStreams[username] = stream
+			r.mu.Unlock()
+			streamRegistered = true
+
+			log.Printf("client joined: %s", username)
+
+			if err := stream.Send(&pb.ServerMessage{
+				MessageType: &pb.ServerMessage_JoinResponse{
+					JoinResponse: &pb.JoinResponse{
+						Timestamp: timestamppb.Now(),
+						Message:   "successfully joined",
+					},
+				},
+			}); err != nil {
+				log.Printf("failed to send join ack: %v", err)
+				return err
+			}
+
+		case *pb.ClientMessage_EncryptedMessage:
+			if !streamRegistered {
+				return fmt.Errorf("client must join before sending messages")
+			}
+
+			log.Printf("message from %s to %s", username, v.EncryptedMessage.ReceiverId)
+
+			r.mu.RLock()
+			recipientStream, ok := r.activeStreams[v.EncryptedMessage.ReceiverId]
+			r.mu.RUnlock()
+
+			if ok {
+				err := recipientStream.Send(&pb.ServerMessage{
+					MessageType: &pb.ServerMessage_EncryptedMessage{
+						EncryptedMessage: &pb.EncryptedMessage{
+							SenderId:       username,
+							ReceiverId:     v.EncryptedMessage.ReceiverId,
+							RatchetMessage: v.EncryptedMessage.RatchetMessage,
+							Timestamp:      timestamppb.Now(),
+						},
+					},
+				})
+				if err != nil {
+					log.Printf("Failed to deliver message to %s: %v",
+						v.EncryptedMessage.ReceiverId, err)
+				}
+			} else {
+				log.Printf("Recipient %s offline, ", v.EncryptedMessage.ReceiverId)
+			}
+
+		case *pb.ClientMessage_KeyExchange:
+			if !streamRegistered {
+				return fmt.Errorf("client must join before key exchange")
+			}
+
+			log.Printf("key exchange from %s to %s", username, v.KeyExchange.ReceiverId)
+
+			r.mu.RLock()
+			recipientStream, ok := r.activeStreams[v.KeyExchange.ReceiverId]
+			r.mu.RUnlock()
+
+			if ok {
+				err := recipientStream.Send(&pb.ServerMessage{
+					MessageType: &pb.ServerMessage_KeyExchange{
+						KeyExchange: &pb.KeyExchangeMessage{
+							SenderId:       username,
+							ReceiverId:     v.KeyExchange.ReceiverId,
+							InitialMessage: v.KeyExchange.InitialMessage,
+						},
+					},
+				})
+				if err != nil {
+					log.Printf("failed to deliver key exchange to %s: %v",
+						v.KeyExchange.ReceiverId, err)
+				}
+			} else {
+				log.Printf("recipient %s offline for key exchange",
+					v.KeyExchange.ReceiverId)
+			}
+
+		case *pb.ClientMessage_Heartbeat:
+			if err := stream.Send(&pb.ServerMessage{
+				MessageType: &pb.ServerMessage_Heartbeat{
+					Heartbeat: &pb.HeartbeatMessage{
+						Timestamp: timestamppb.Now(),
+					},
+				},
+			}); err != nil {
+				log.Printf("failed to send heartbeat ack: %v", err)
+				return err
+			}
+
+		default:
+			log.Printf("unknown message type from %s: %T", username, v)
+			return fmt.Errorf("unknown message type: %T", v)
+		}
+	}
 }

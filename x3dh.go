@@ -344,6 +344,11 @@ func (u *X3DHUser) CreateInitialMessage(
 	return msg, sharedSecret, nil
 }
 
+func (u *X3DHUser) clearOneTimePrekey() {
+	u.OneTimePrekeyPublic = nil
+	u.OneTimePrekeyPrivate = nil
+}
+
 // verifyPrekeySignature takes in a prekey bundle and a given verifying key and
 // checks that the given signature is a valid message from the public key.
 func verifyPrekeySignature(

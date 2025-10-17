@@ -16,6 +16,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const initialOtpCount = 50
+
 // RpcClient is a gRPC client for the ChatService. It also takes care of handling encryption etc
 type RpcClient struct {
 	conn          *grpc.ClientConn
@@ -26,6 +28,9 @@ type RpcClient struct {
 	mu            sync.RWMutex
 	stream        pb.ChatService_MessageStreamClient
 	streamMu      sync.Mutex
+
+	otpPrivKeys map[[32]byte]*ecdh.PrivateKey
+	otpMu       sync.RWMutex
 
 	// a function to capture the messages for testing purposes
 	onMessageReceived func(from, message string)
@@ -50,7 +55,17 @@ func NewRpcClient(addr string, username string) (*RpcClient, error) {
 		user:          user,
 		username:      username,
 		conversations: make(map[string]*Conversation),
+		otpPrivKeys:   make(map[[32]byte]*ecdh.PrivateKey),
 	}, nil
+}
+
+func (c *RpcClient) storeOTP(publicKey []byte, privKey *ecdh.PrivateKey) {
+	var key [32]byte
+	copy(key[:], publicKey)
+
+	c.otpMu.Lock()
+	c.otpPrivKeys[key] = privKey
+	c.otpMu.Unlock()
 }
 
 // Close closes the gRPC client connection.
@@ -64,14 +79,15 @@ func (c *RpcClient) Close() error {
 }
 
 // generateOtps generates n one-time prekeys.
-func (c *RpcClient) generateOtps(n int) ([]*pb.SignedPrekey, error) {
+func (c *RpcClient) generateOtps(n int) ([]*pb.SignedPrekey, []*ecdh.PrivateKey, error) {
 	otps := make([]*pb.SignedPrekey, n)
+	privKeys := make([]*ecdh.PrivateKey, n)
 	curve := ecdh.X25519()
 
 	for i := 0; i < n; i++ {
 		otpPriv, err := curve.GenerateKey(rand.Reader)
 		if err != nil {
-			return nil, fmt.Errorf("failed to generate otp: %w", err)
+			return nil, nil, fmt.Errorf("failed to generate otp: %w", err)
 		}
 
 		otps[i] = &pb.SignedPrekey{
@@ -82,15 +98,17 @@ func (c *RpcClient) generateOtps(n int) ([]*pb.SignedPrekey, error) {
 			),
 			CreatedAt: timestamppb.Now(),
 		}
+
+		privKeys[i] = otpPriv
 	}
 
-	return otps, nil
+	return otps, privKeys, nil
 }
 
 // Register registers the user with the server using the provided username. It generates prekeys and
 // one-time prekeys as part of the registration process.
 func (c *RpcClient) Register(ctx context.Context, username string) error {
-	err := c.user.GeneratePrekeys(true)
+	err := c.user.GeneratePrekeys(false)
 	if err != nil {
 		return fmt.Errorf("failed to generate prekeys, %v", err)
 	}
@@ -104,7 +122,7 @@ func (c *RpcClient) Register(ctx context.Context, username string) error {
 		CreatedAt: timestamppb.Now(),
 	}
 
-	otps, err := c.generateOtps(0)
+	otps, err := c.generateAndStoreOtps(initialOtpCount)
 	if err != nil {
 		return fmt.Errorf("failed to generate otps: %v", err)
 	}
@@ -134,11 +152,31 @@ func (c *RpcClient) FetchBundle(ctx context.Context, username string) (*pb.Preke
 	return resp.Bundle, nil
 }
 
+func (c *RpcClient) generateAndStoreOtps(count int) ([]*pb.SignedPrekey, error) {
+	otps, privKeys, err := c.generateOtps(count)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate otps: %v", err)
+	}
+
+	// we need to keep track of the private keys
+	// TODO: implement some kind of storage for the private key
+	c.otpMu.Lock()
+	for i := range otps {
+		var publicKeyFixed [32]byte
+		copy(publicKeyFixed[:], otps[i].PublicKey)
+
+		c.otpPrivKeys[publicKeyFixed] = privKeys[i]
+	}
+	c.otpMu.Unlock()
+
+	return otps, nil
+}
+
 // UploadOTPs uploads one-time prekeys to the server.
 func (c *RpcClient) UploadOTPs(ctx context.Context, count int) error {
-	otps, err := c.generateOtps(count)
+	otps, err := c.generateAndStoreOtps(count)
 	if err != nil {
-		return fmt.Errorf("failed to generate otps: %v", err)
+		return err
 	}
 
 	req := &pb.UploadOTPsRequest{
@@ -371,27 +409,21 @@ func (c *RpcClient) InitiateChat(ctx context.Context, recipientID string) error 
 		return fmt.Errorf("failed to create initial message: %v", err)
 	}
 
-	// Create Alice's ratchet state
 	aliceRatchet, err := NewRatchetState()
 	if err != nil {
 		return fmt.Errorf("failed to create ratchet state: %v", err)
 	}
 
-	// Initialize Alice as sender - matching the working test exactly
 	var sharedKey [32]byte
 	copy(sharedKey[:], sharedSecret)
 
-	// CRITICAL: Use Bob's signed prekey as his ratchet public key
-	// This is what Bob will use on his side too
 	aliceRatchet.ReceivingPublicKey = signedPrekey
 
-	// Perform DH with Alice's ratchet key and Bob's signed prekey (his ratchet key)
 	dhShared, err := aliceRatchet.SendingSecretKey.ECDH(aliceRatchet.ReceivingPublicKey)
 	if err != nil {
 		return fmt.Errorf("failed to perform DH: %v", err)
 	}
 
-	// Derive root key and sending chain key
 	aliceRatchet.RootKey, aliceRatchet.ChainKeySending = kdfRootKey(sharedKey[:], dhShared)
 
 	ad := c.user.additionalInformation(identityKey)
@@ -463,19 +495,50 @@ func (c *RpcClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
 		EphemeralKey: ephemeralKey,
 	}
 
+	var sharedSecret []byte
 	if len(msg.InitialMessage.OneTimePrekey) > 0 {
+		var oneTimePub [32]byte
 		oneTimeKey, err := ecdh.X25519().NewPublicKey(msg.InitialMessage.OneTimePrekey)
 		if err != nil {
 			log.Printf("failed to parse one-time prekey: %v", err)
 			return
 		}
 		initMsg.OneTimePrekeyUsed = oneTimeKey
-	}
+		copy(oneTimePub[:], oneTimeKey.Bytes())
 
-	sharedSecret, err := c.user.calculateSharedSecretAsReceiver(initMsg)
-	if err != nil {
-		log.Printf("failed to calculate shared secret: %v", err)
-		return
+		// this should update the user
+		// TODO: can this happen at the same time causing race condition so refactor this into the
+		// calculateSharedSecretAsReceiver function also this would make this function a lot cleaner
+		c.otpMu.RLock()
+		otpPriv, ok := c.otpPrivKeys[oneTimePub]
+		if !ok {
+			log.Printf(
+				"failed to find one-time private key used, cannot establish shared secret properly",
+			)
+		}
+		c.otpMu.RUnlock()
+
+		c.user.OneTimePrekeyPrivate = otpPriv
+		c.user.OneTimePrekeyPublic = otpPriv.PublicKey()
+
+		sharedSecret, err = c.user.calculateSharedSecretAsReceiver(initMsg)
+		if err != nil {
+			log.Printf("failed to calculate shared secret: %v", err)
+			return
+		}
+
+		// as the name implies these should only be used once
+		c.otpMu.Lock()
+		delete(c.otpPrivKeys, oneTimePub)
+		c.otpMu.Unlock()
+
+		c.user.clearOneTimePrekey()
+	} else {
+		sharedSecret, err = c.user.calculateSharedSecretAsReceiver(initMsg)
+		if err != nil {
+			log.Printf("failed to calculate shared secret: %v", err)
+			return
+		}
 	}
 
 	bobRatchet := &RatchetState{
@@ -489,11 +552,6 @@ func (c *RpcClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
 	copy(sharedKey[:], sharedSecret)
 	bobRatchet.RootKey = sharedKey
 
-	// CRITICAL FIX: Bob needs to know Alice's ratchet public key
-	// This will be in the first message Alice sends, but we need to
-	// mark that Bob hasn't received a message yet
-	// The ReceivingPublicKey will be set when the first message arrives
-
 	ad := append(identityKey.Bytes(), c.user.IdentityPublicKey.Bytes()...)
 	ad = append(ad, []byte(msg.SenderId)...)
 
@@ -505,7 +563,6 @@ func (c *RpcClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
 		AdditionalData:    ad,
 	}
 	c.mu.Unlock()
-
 	log.Printf("key exchange completed with %s", msg.SenderId)
 }
 

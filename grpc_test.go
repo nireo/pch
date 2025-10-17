@@ -2,6 +2,7 @@ package pch
 
 import (
 	"context"
+	"crypto/ecdh"
 	"fmt"
 	"net"
 	"os"
@@ -170,6 +171,7 @@ func createTestClient(
 		user:          user,
 		username:      username,
 		conversations: make(map[string]*Conversation),
+		otpPrivKeys:   make(map[[32]byte]*ecdh.PrivateKey),
 	}, nil
 }
 

@@ -12,9 +12,10 @@ import (
 )
 
 var (
-	userBucket = []byte("users")
-	convPrefix = []byte("con")
-	otpBucket  = []byte("otps")
+	userBucket      = []byte("users")
+	convPrefix      = []byte("con")
+	otpBucket       = []byte("otps")
+	offlineMessages = []byte("offline")
 )
 
 type Storage struct {
@@ -28,6 +29,19 @@ type UserRecord struct {
 	SignedPrekey   *pb.SignedPrekey
 	OneTimePrekeys []*pb.SignedPrekey
 	CreatedAt      time.Time
+}
+
+type OfflineMessageKind int
+
+const (
+	EncryptedMessageKind OfflineMessageKind = iota
+	InitialMessageKind
+)
+
+type OfflineMessage struct {
+	Kind      OfflineMessageKind
+	Message   []byte
+	Timestamp time.Time
 }
 
 func encodeEntry[T any](entry T) ([]byte, error) {
@@ -87,6 +101,11 @@ func (s *Storage) ensureBuckets() error {
 		}
 
 		_, err = tx.CreateBucketIfNotExists(otpBucket)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.CreateBucketIfNotExists(offlineMessages)
 		return err
 	})
 }
@@ -214,4 +233,31 @@ func (s *Storage) GetUser(username string) (*UserRecord, error) {
 	})
 
 	return &user, err
+}
+
+func (s *Storage) GetUserMessages(username string) ([]OfflineMessage, error) {
+	var messages []OfflineMessage
+	return messages, nil
+}
+
+func (s *Storage) AddUserMessage(
+	storedMessage OfflineMessage,
+	toUsername, fromUsername string,
+) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(offlineMessages)
+
+		uBucket, err := b.CreateBucketIfNotExists([]byte(toUsername))
+		if err != nil {
+			return fmt.Errorf("failed to create user messages bucket: %s", err)
+		}
+
+		data, err := encodeEntry(storedMessage)
+		if err != nil {
+			return fmt.Errorf("failed to encode message")
+		}
+
+		err = uBucket.Put([]byte(fromUsername), data)
+		return err
+	})
 }

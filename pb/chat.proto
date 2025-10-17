@@ -1,19 +1,24 @@
 syntax = "proto3";
 package pch;
-option go_package = "github.com/nireo/pch/proto";
-
+option go_package = "github.com/nireo/pch/pb";
 import "google/protobuf/timestamp.proto";
 
+// ChatService provides messaging and key exchange functionality
 service ChatService {
+  // Register a new user with identity keys and prekeys
   rpc Register(RegisterRequest) returns (RegisterResponse);
+  
+  // Upload additional one-time prekeys
   rpc UploadOTPs(UploadOTPsRequest) returns (UploadOTPsResponse);
   
+  // Fetch a user's prekey bundle for initiating communication
   rpc FetchBundle(FetchBundleRequest) returns (FetchBundleResponse);
   
+  // Bidirectional stream for real-time messaging
   rpc MessageStream(stream ClientMessage) returns (stream ServerMessage);
 }
 
-
+// Registration messages
 message RegisterRequest {
   string username = 1;
   bytes identity_key = 2;
@@ -28,10 +33,11 @@ message RegisterResponse {
 
 message SignedPrekey {
   bytes public_key = 1;
-  bytes signature = 2; 
+  bytes signature = 2;
   google.protobuf.Timestamp created_at = 3;
 }
 
+// One-time prekey management
 message UploadOTPsRequest {
   string username = 1;
   repeated SignedPrekey one_time_prekeys = 2;
@@ -42,22 +48,23 @@ message UploadOTPsResponse {
   int32 total_otps = 2;
 }
 
+// Prekey bundle fetch
 message FetchBundleRequest {
   string username = 1;
 }
 
 message FetchBundleResponse {
-  string username = 1;
-  PrekeyBundle bundle = 2;
+  PrekeyBundle bundle = 1;
 }
 
 message PrekeyBundle {
   bytes identity_key = 1;
   bytes signed_prekey = 2;
   bytes prekey_signature = 3;
-  optional bytes one_time_prekey = 4;
+  bytes one_time_prekey = 4;
 }
 
+// Streaming message types
 message ClientMessage {
   oneof message_type {
     JoinRequest join = 1;
@@ -76,6 +83,7 @@ message ServerMessage {
   }
 }
 
+// Join messages
 message JoinRequest {
   string username = 1;
 }
@@ -85,6 +93,7 @@ message JoinResponse {
   google.protobuf.Timestamp timestamp = 2;
 }
 
+// Key exchange for X3DH
 message KeyExchangeMessage {
   string sender_id = 1;
   string receiver_id = 2;
@@ -95,10 +104,10 @@ message KeyExchangeMessage {
 message InitialMessage {
   bytes identity_key = 1;
   bytes ephemeral_key = 2;
-  bytes signed_prekey = 3;
-  optional bytes one_time_prekey = 4;
+  bytes one_time_prekey = 3;
 }
 
+// Encrypted messages with Double Ratchet
 message EncryptedMessage {
   string sender_id = 1;
   string receiver_id = 2;
@@ -111,12 +120,15 @@ message RatchetMessage {
   int32 previous_chain_length = 2;
   int32 message_number = 3;
   bytes ciphertext = 4;
+  bytes nonce = 5;
 }
 
+// Heartbeat for connection keepalive
 message HeartbeatMessage {
   google.protobuf.Timestamp timestamp = 1;
 }
 
+// User storage record
 message UserRecord {
   string username = 1;
   bytes identity_key = 2;

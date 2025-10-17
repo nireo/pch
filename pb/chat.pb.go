@@ -4,7 +4,7 @@
 // 	protoc        v6.32.1
 // source: pb/chat.proto
 
-package proto
+package pb
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -22,6 +22,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Registration messages
 type RegisterRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Username       string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -202,6 +203,7 @@ func (x *SignedPrekey) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// One-time prekey management
 type UploadOTPsRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Username       string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -306,6 +308,7 @@ func (x *UploadOTPsResponse) GetTotalOtps() int32 {
 	return 0
 }
 
+// Prekey bundle fetch
 type FetchBundleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -352,8 +355,7 @@ func (x *FetchBundleRequest) GetUsername() string {
 
 type FetchBundleResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Bundle        *PrekeyBundle          `protobuf:"bytes,2,opt,name=bundle,proto3" json:"bundle,omitempty"`
+	Bundle        *PrekeyBundle          `protobuf:"bytes,1,opt,name=bundle,proto3" json:"bundle,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -388,13 +390,6 @@ func (*FetchBundleResponse) Descriptor() ([]byte, []int) {
 	return file_pb_chat_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *FetchBundleResponse) GetUsername() string {
-	if x != nil {
-		return x.Username
-	}
-	return ""
-}
-
 func (x *FetchBundleResponse) GetBundle() *PrekeyBundle {
 	if x != nil {
 		return x.Bundle
@@ -407,7 +402,7 @@ type PrekeyBundle struct {
 	IdentityKey     []byte                 `protobuf:"bytes,1,opt,name=identity_key,json=identityKey,proto3" json:"identity_key,omitempty"`
 	SignedPrekey    []byte                 `protobuf:"bytes,2,opt,name=signed_prekey,json=signedPrekey,proto3" json:"signed_prekey,omitempty"`
 	PrekeySignature []byte                 `protobuf:"bytes,3,opt,name=prekey_signature,json=prekeySignature,proto3" json:"prekey_signature,omitempty"`
-	OneTimePrekey   []byte                 `protobuf:"bytes,4,opt,name=one_time_prekey,json=oneTimePrekey,proto3,oneof" json:"one_time_prekey,omitempty"`
+	OneTimePrekey   []byte                 `protobuf:"bytes,4,opt,name=one_time_prekey,json=oneTimePrekey,proto3" json:"one_time_prekey,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -470,6 +465,7 @@ func (x *PrekeyBundle) GetOneTimePrekey() []byte {
 	return nil
 }
 
+// Streaming message types
 type ClientMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to MessageType:
@@ -698,6 +694,7 @@ func (*ServerMessage_EncryptedMessage) isServerMessage_MessageType() {}
 
 func (*ServerMessage_Heartbeat) isServerMessage_MessageType() {}
 
+// Join messages
 type JoinRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -794,6 +791,7 @@ func (x *JoinResponse) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
+// Key exchange for X3DH
 type KeyExchangeMessage struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	SenderId       string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
@@ -866,8 +864,7 @@ type InitialMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	IdentityKey   []byte                 `protobuf:"bytes,1,opt,name=identity_key,json=identityKey,proto3" json:"identity_key,omitempty"`
 	EphemeralKey  []byte                 `protobuf:"bytes,2,opt,name=ephemeral_key,json=ephemeralKey,proto3" json:"ephemeral_key,omitempty"`
-	SignedPrekey  []byte                 `protobuf:"bytes,3,opt,name=signed_prekey,json=signedPrekey,proto3" json:"signed_prekey,omitempty"`
-	OneTimePrekey []byte                 `protobuf:"bytes,4,opt,name=one_time_prekey,json=oneTimePrekey,proto3,oneof" json:"one_time_prekey,omitempty"`
+	OneTimePrekey []byte                 `protobuf:"bytes,3,opt,name=one_time_prekey,json=oneTimePrekey,proto3" json:"one_time_prekey,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -916,13 +913,6 @@ func (x *InitialMessage) GetEphemeralKey() []byte {
 	return nil
 }
 
-func (x *InitialMessage) GetSignedPrekey() []byte {
-	if x != nil {
-		return x.SignedPrekey
-	}
-	return nil
-}
-
 func (x *InitialMessage) GetOneTimePrekey() []byte {
 	if x != nil {
 		return x.OneTimePrekey
@@ -930,6 +920,7 @@ func (x *InitialMessage) GetOneTimePrekey() []byte {
 	return nil
 }
 
+// Encrypted messages with Double Ratchet
 type EncryptedMessage struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	SenderId       string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
@@ -1004,6 +995,7 @@ type RatchetMessage struct {
 	PreviousChainLength int32                  `protobuf:"varint,2,opt,name=previous_chain_length,json=previousChainLength,proto3" json:"previous_chain_length,omitempty"`
 	MessageNumber       int32                  `protobuf:"varint,3,opt,name=message_number,json=messageNumber,proto3" json:"message_number,omitempty"`
 	Ciphertext          []byte                 `protobuf:"bytes,4,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	Nonce               []byte                 `protobuf:"bytes,5,opt,name=nonce,proto3" json:"nonce,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -1066,6 +1058,14 @@ func (x *RatchetMessage) GetCiphertext() []byte {
 	return nil
 }
 
+func (x *RatchetMessage) GetNonce() []byte {
+	if x != nil {
+		return x.Nonce
+	}
+	return nil
+}
+
+// Heartbeat for connection keepalive
 type HeartbeatMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
@@ -1110,6 +1110,7 @@ func (x *HeartbeatMessage) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
+// User storage record
 type UserRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -1221,16 +1222,14 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\n" +
 	"total_otps\x18\x02 \x01(\x05R\ttotalOtps\"0\n" +
 	"\x12FetchBundleRequest\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"\\\n" +
-	"\x13FetchBundleResponse\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\x12)\n" +
-	"\x06bundle\x18\x02 \x01(\v2\x11.pch.PrekeyBundleR\x06bundle\"\xc2\x01\n" +
+	"\busername\x18\x01 \x01(\tR\busername\"@\n" +
+	"\x13FetchBundleResponse\x12)\n" +
+	"\x06bundle\x18\x01 \x01(\v2\x11.pch.PrekeyBundleR\x06bundle\"\xa9\x01\n" +
 	"\fPrekeyBundle\x12!\n" +
 	"\fidentity_key\x18\x01 \x01(\fR\videntityKey\x12#\n" +
 	"\rsigned_prekey\x18\x02 \x01(\fR\fsignedPrekey\x12)\n" +
-	"\x10prekey_signature\x18\x03 \x01(\fR\x0fprekeySignature\x12+\n" +
-	"\x0fone_time_prekey\x18\x04 \x01(\fH\x00R\roneTimePrekey\x88\x01\x01B\x12\n" +
-	"\x10_one_time_prekey\"\x82\x02\n" +
+	"\x10prekey_signature\x18\x03 \x01(\fR\x0fprekeySignature\x12&\n" +
+	"\x0fone_time_prekey\x18\x04 \x01(\fR\roneTimePrekey\"\x82\x02\n" +
 	"\rClientMessage\x12&\n" +
 	"\x04join\x18\x01 \x01(\v2\x10.pch.JoinRequestH\x00R\x04join\x12<\n" +
 	"\fkey_exchange\x18\x02 \x01(\v2\x17.pch.KeyExchangeMessageH\x00R\vkeyExchange\x12D\n" +
@@ -1253,19 +1252,17 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\vreceiver_id\x18\x02 \x01(\tR\n" +
 	"receiverId\x12<\n" +
 	"\x0finitial_message\x18\x03 \x01(\v2\x13.pch.InitialMessageR\x0einitialMessage\x128\n" +
-	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xbe\x01\n" +
+	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x80\x01\n" +
 	"\x0eInitialMessage\x12!\n" +
 	"\fidentity_key\x18\x01 \x01(\fR\videntityKey\x12#\n" +
-	"\rephemeral_key\x18\x02 \x01(\fR\fephemeralKey\x12#\n" +
-	"\rsigned_prekey\x18\x03 \x01(\fR\fsignedPrekey\x12+\n" +
-	"\x0fone_time_prekey\x18\x04 \x01(\fH\x00R\roneTimePrekey\x88\x01\x01B\x12\n" +
-	"\x10_one_time_prekey\"\xc8\x01\n" +
+	"\rephemeral_key\x18\x02 \x01(\fR\fephemeralKey\x12&\n" +
+	"\x0fone_time_prekey\x18\x03 \x01(\fR\roneTimePrekey\"\xc8\x01\n" +
 	"\x10EncryptedMessage\x12\x1b\n" +
 	"\tsender_id\x18\x01 \x01(\tR\bsenderId\x12\x1f\n" +
 	"\vreceiver_id\x18\x02 \x01(\tR\n" +
 	"receiverId\x12<\n" +
 	"\x0fratchet_message\x18\x03 \x01(\v2\x13.pch.RatchetMessageR\x0eratchetMessage\x128\n" +
-	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xaa\x01\n" +
+	"\ttimestamp\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xc0\x01\n" +
 	"\x0eRatchetMessage\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\fR\tpublicKey\x122\n" +
@@ -1273,7 +1270,8 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\x0emessage_number\x18\x03 \x01(\x05R\rmessageNumber\x12\x1e\n" +
 	"\n" +
 	"ciphertext\x18\x04 \x01(\fR\n" +
-	"ciphertext\"L\n" +
+	"ciphertext\x12\x14\n" +
+	"\x05nonce\x18\x05 \x01(\fR\x05nonce\"L\n" +
 	"\x10HeartbeatMessage\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\x9c\x02\n" +
 	"\n" +
@@ -1290,7 +1288,7 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\n" +
 	"UploadOTPs\x12\x16.pch.UploadOTPsRequest\x1a\x17.pch.UploadOTPsResponse\x12@\n" +
 	"\vFetchBundle\x12\x17.pch.FetchBundleRequest\x1a\x18.pch.FetchBundleResponse\x12;\n" +
-	"\rMessageStream\x12\x12.pch.ClientMessage\x1a\x12.pch.ServerMessage(\x010\x01B\x1cZ\x1agithub.com/nireo/pch/protob\x06proto3"
+	"\rMessageStream\x12\x12.pch.ClientMessage\x1a\x12.pch.ServerMessage(\x010\x01B\x19Z\x17github.com/nireo/pch/pbb\x06proto3"
 
 var (
 	file_pb_chat_proto_rawDescOnce sync.Once
@@ -1369,7 +1367,6 @@ func file_pb_chat_proto_init() {
 	if File_pb_chat_proto != nil {
 		return
 	}
-	file_pb_chat_proto_msgTypes[7].OneofWrappers = []any{}
 	file_pb_chat_proto_msgTypes[8].OneofWrappers = []any{
 		(*ClientMessage_Join)(nil),
 		(*ClientMessage_KeyExchange)(nil),
@@ -1382,7 +1379,6 @@ func file_pb_chat_proto_init() {
 		(*ServerMessage_EncryptedMessage)(nil),
 		(*ServerMessage_Heartbeat)(nil),
 	}
-	file_pb_chat_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -85,18 +85,14 @@ func (r *RpcServer) FetchBundle(
 		return nil, fmt.Errorf("user not found: %s", req.Username)
 	}
 
-	otp, err := r.store.PopOTP(req.Username)
-	if err != nil {
-		return nil, fmt.Errorf("no more otps available for user")
-	}
-
 	bundle := &pb.PrekeyBundle{
 		IdentityKey:     userRecord.IdentityKey,
 		SignedPrekey:    userRecord.SignedPrekey.PublicKey,
 		PrekeySignature: userRecord.SignedPrekey.Signature,
 	}
 
-	if otp != nil {
+	otp, err := r.store.PopOTP(req.Username)
+	if err == nil && otp != nil {
 		bundle.OneTimePrekey = otp.PublicKey
 	}
 

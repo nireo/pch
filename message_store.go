@@ -2,7 +2,9 @@ package pch
 
 import (
 	"crypto/ecdh"
+	"encoding/binary"
 	"fmt"
+	"time"
 
 	bolt "go.etcd.io/bbolt"
 )
@@ -17,6 +19,13 @@ var (
 // itself is secure. The local store is also responsible for storing the one-time prekeys used.
 type LocalStore struct {
 	db *bolt.DB
+}
+
+// LocalMessage represents a message stored in the local store.
+type LocalMessage struct {
+	Timestamp time.Time
+	Content   string
+	SenderID  string // could be the user themselves or the other party
 }
 
 // Close closes the local store database.
@@ -84,4 +93,81 @@ func (l *LocalStore) GetOTPs() (map[[32]byte]*ecdh.PrivateKey, error) {
 		})
 	})
 	return otps, err
+}
+
+// DeleteOTP deletes the OTP for the given public key from the local store.
+func (l *LocalStore) DeleteOTP(pubKey [32]byte) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localOtpBucket)
+		return b.Delete(pubKey[:])
+	})
+}
+
+// StoreMessage stores a message for the given chat person.
+func (l *LocalStore) StoreMessage(chatPerson string, msg LocalMessage) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localChatBucket)
+		chatB, err := b.CreateBucketIfNotExists([]byte(chatPerson))
+		if err != nil {
+			return err
+		}
+
+		data, err := encodeGob(msg)
+		if err != nil {
+			return err
+		}
+
+		var timestampKey [8]byte
+		binary.BigEndian.PutUint64(timestampKey[:], uint64(msg.Timestamp.UnixNano()))
+		return chatB.Put(timestampKey[:], data)
+	})
+}
+
+// StoreMessages stores multiple messages for the given chat person.
+func (l *LocalStore) StoreMessages(chatPerson string, msgs []LocalMessage) error {
+	return l.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localChatBucket)
+		chatB, err := b.CreateBucketIfNotExists([]byte(chatPerson))
+		if err != nil {
+			return err
+		}
+
+		for _, msg := range msgs {
+			data, err := encodeGob(msg)
+			if err != nil {
+				return err
+			}
+
+			var timestampKey [8]byte
+			binary.BigEndian.PutUint64(timestampKey[:], uint64(msg.Timestamp.UnixNano()))
+			err = chatB.Put(timestampKey[:], data)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// GetMessages retrieves all messages for the given chat person.
+func (l *LocalStore) GetMessages(chatPerson string) ([]LocalMessage, error) {
+	messages := []LocalMessage{}
+	err := l.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localChatBucket)
+		chatB := b.Bucket([]byte(chatPerson))
+		if chatB == nil {
+			return nil // no messages
+		}
+
+		return chatB.ForEach(func(k, v []byte) error {
+			var msg LocalMessage
+			err := decodeGob(v, &msg)
+			if err != nil {
+				return err
+			}
+			messages = append(messages, msg)
+			return nil
+		})
+	})
+	return messages, err
 }

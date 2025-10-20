@@ -44,7 +44,7 @@ type OfflineMessage struct {
 	Timestamp time.Time
 }
 
-func encodeEntry[T any](entry T) ([]byte, error) {
+func encodeGob[T any](entry T) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(entry); err != nil {
@@ -52,6 +52,12 @@ func encodeEntry[T any](entry T) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func decodeGob[T any](data []byte, entry *T) error {
+	buf := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buf)
+	return dec.Decode(entry)
 }
 
 func NewStorage(dbPath string) (*Storage, error) {
@@ -207,7 +213,7 @@ func (s *Storage) StoreUser(user *UserRecord) error {
 		b := tx.Bucket(userBucket)
 
 		// TODO: refactor this to use the proto definitions as well.
-		data, err := encodeEntry(user)
+		data, err := encodeGob(user)
 		if err != nil {
 			return fmt.Errorf("failed to encode user: %w", err)
 		}
@@ -252,7 +258,7 @@ func (s *Storage) AddUserMessage(
 			return fmt.Errorf("failed to create user messages bucket: %s", err)
 		}
 
-		data, err := encodeEntry(storedMessage)
+		data, err := encodeGob(storedMessage)
 		if err != nil {
 			return fmt.Errorf("failed to encode message")
 		}

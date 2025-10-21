@@ -25,7 +25,7 @@ type LocalStore struct {
 type LocalMessage struct {
 	Timestamp time.Time
 	Content   string
-	SenderID  string // could be the user themselves or the other party
+	FromLocal bool // this signifies if the sender is the local user or the other user
 }
 
 // Close closes the local store database.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path"
 	"sync"
 	"testing"
 	"time"
@@ -47,13 +48,13 @@ func TestMessageSendReceive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	alice, err := createTestClient(ctx, bufDialer, "alice")
+	alice, err := createTestClient(t, ctx, bufDialer, "alice")
 	if err != nil {
 		t.Fatalf("Failed to create alice: %v", err)
 	}
 	defer alice.Close()
 
-	bob, err := createTestClient(ctx, bufDialer, "bob")
+	bob, err := createTestClient(t, ctx, bufDialer, "bob")
 	if err != nil {
 		t.Fatalf("Failed to create bob: %v", err)
 	}
@@ -147,6 +148,7 @@ func TestMessageSendReceive(t *testing.T) {
 }
 
 func createTestClient(
+	t *testing.T,
 	ctx context.Context,
 	dialer func(context.Context, string) (net.Conn, error),
 	username string,
@@ -165,6 +167,13 @@ func createTestClient(
 		return nil, fmt.Errorf("failed to create user: %v", err)
 	}
 
+	localPath := path.Join(t.TempDir(), "localstore.db")
+	ls, err := NewLocalStore(localPath)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to store local store: %v", err)
+	}
+
 	return &RpcClient{
 		conn:          conn,
 		srv:           pb.NewChatServiceClient(conn),
@@ -172,6 +181,7 @@ func createTestClient(
 		username:      username,
 		conversations: make(map[string]*Conversation),
 		otpPrivKeys:   make(map[[32]byte]*ecdh.PrivateKey),
+		localStore:    ls,
 	}, nil
 }
 
@@ -200,9 +210,9 @@ func TestMultipleMessages(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
 	defer alice.Close()
-	bob, _ := createTestClient(ctx, bufDialer, "bob")
+	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
 	defer bob.Close()
 
 	alice.Register(ctx, "alice")
@@ -278,7 +288,7 @@ func TestMessageWithoutKeyExchange(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
 	defer alice.Close()
 
 	alice.Register(ctx, "alice")

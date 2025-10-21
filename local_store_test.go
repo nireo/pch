@@ -105,7 +105,7 @@ func TestLocalStore_StoreAndGetMessages(t *testing.T) {
 	msg := LocalMessage{
 		Timestamp: time.Now(),
 		Content:   "Hello, World!",
-		SenderID:  "bob",
+		FromLocal: true,
 	}
 
 	err = store.StoreMessage(chatPerson, msg)
@@ -126,8 +126,8 @@ func TestLocalStore_StoreAndGetMessages(t *testing.T) {
 		t.Errorf("expected content %q, got %q", msg.Content, messages[0].Content)
 	}
 
-	if messages[0].SenderID != msg.SenderID {
-		t.Errorf("expected sender %q, got %q", msg.SenderID, messages[0].SenderID)
+	if messages[0].FromLocal {
+		t.Errorf("expected sender message from local")
 	}
 }
 
@@ -143,9 +143,9 @@ func TestLocalStore_StoreMultipleMessages(t *testing.T) {
 
 	chatPerson := "alice"
 	msgs := []LocalMessage{
-		{Timestamp: time.Now().Add(-2 * time.Hour), Content: "First", SenderID: "bob"},
-		{Timestamp: time.Now().Add(-1 * time.Hour), Content: "Second", SenderID: "alice"},
-		{Timestamp: time.Now(), Content: "Third", SenderID: "bob"},
+		{Timestamp: time.Now().Add(-2 * time.Hour), Content: "First", FromLocal: true},
+		{Timestamp: time.Now().Add(-1 * time.Hour), Content: "Second", FromLocal: false},
+		{Timestamp: time.Now(), Content: "Third", FromLocal: true},
 	}
 
 	err = store.StoreMessages(chatPerson, msgs)
@@ -209,10 +209,10 @@ func TestLocalStore_MessagesSortedByTimestamp(t *testing.T) {
 	baseTime := time.Now()
 
 	msgs := []LocalMessage{
-		{Timestamp: baseTime.Add(3 * time.Minute), Content: "Fourth", SenderID: "bob"},
-		{Timestamp: baseTime, Content: "First", SenderID: "alice"},
-		{Timestamp: baseTime.Add(2 * time.Minute), Content: "Third", SenderID: "bob"},
-		{Timestamp: baseTime.Add(1 * time.Minute), Content: "Second", SenderID: "alice"},
+		{Timestamp: baseTime.Add(3 * time.Minute), Content: "Fourth", FromLocal: true},
+		{Timestamp: baseTime, Content: "First", FromLocal: false},
+		{Timestamp: baseTime.Add(2 * time.Minute), Content: "Third", FromLocal: true},
+		{Timestamp: baseTime.Add(1 * time.Minute), Content: "Second", FromLocal: false},
 	}
 
 	err = store.StoreMessages(chatPerson, msgs)

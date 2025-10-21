@@ -28,6 +28,7 @@ type RpcClient struct {
 	mu            sync.RWMutex
 	stream        pb.ChatService_MessageStreamClient
 	streamMu      sync.Mutex
+	localStore    *LocalStore
 
 	otpPrivKeys map[[32]byte]*ecdh.PrivateKey
 	otpMu       sync.RWMutex
@@ -37,7 +38,7 @@ type RpcClient struct {
 }
 
 // NewRpcClient creates a new gRPC client connected to the specified address.
-func NewRpcClient(addr string, username string) (*RpcClient, error) {
+func NewRpcClient(addr string, username string, localStorePath string) (*RpcClient, error) {
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("error making client: %v", err)
@@ -49,7 +50,14 @@ func NewRpcClient(addr string, username string) (*RpcClient, error) {
 		return nil, fmt.Errorf("failed to create user: %v", err)
 	}
 
+	localStore, err := NewLocalStore(localStorePath)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("failed to create user: %v", err)
+	}
+
 	return &RpcClient{
+		localStore:    localStore,
 		conn:          conn,
 		srv:           pb.NewChatServiceClient(conn),
 		user:          user,
@@ -158,16 +166,23 @@ func (c *RpcClient) generateAndStoreOtps(count int) ([]*pb.SignedPrekey, error) 
 		return nil, fmt.Errorf("failed to generate otps: %v", err)
 	}
 
-	// we need to keep track of the private keys
-	// TODO: implement some kind of storage for the private key
+	toStore := make(map[[32]byte][]byte, count)
+	// add them to the current map
 	c.otpMu.Lock()
 	for i := range otps {
 		var publicKeyFixed [32]byte
 		copy(publicKeyFixed[:], otps[i].PublicKey)
 
 		c.otpPrivKeys[publicKeyFixed] = privKeys[i]
+		toStore[publicKeyFixed] = privKeys[i].Bytes()
 	}
 	c.otpMu.Unlock()
+
+	// also add them to local storage such that they will persist even if user quits the application
+	err = c.localStore.StoreOTPs(toStore)
+	if err != nil {
+		return nil, fmt.Errorf("error storing otps in local storage: %v", err)
+	}
 
 	return otps, nil
 }
@@ -319,6 +334,18 @@ func (c *RpcClient) handleEncryptedMessage(msg *pb.EncryptedMessage) {
 		c.onMessageReceived(msg.SenderId, plaintext)
 	}
 
+	// after the encryption we need to plaintext mainly for performance reasons and we work under
+	// the assumption that the user's computer is secure.
+	err = c.localStore.StoreMessage(msg.SenderId, LocalMessage{
+		Timestamp: msg.Timestamp.AsTime(),
+		Content:   plaintext,
+		FromLocal: false,
+	})
+	if err != nil {
+		log.Printf("failed to store message locally: %s", err)
+		return
+	}
+
 	fmt.Printf("[%s]: %s\n", msg.SenderId, plaintext)
 }
 
@@ -355,19 +382,32 @@ func (c *RpcClient) SendMessage(recipientID, text string) error {
 		return fmt.Errorf("stream not initialized")
 	}
 
+	ts := timestamppb.Now()
 	clientMsg := &pb.ClientMessage{
 		MessageType: &pb.ClientMessage_EncryptedMessage{
 			EncryptedMessage: &pb.EncryptedMessage{
 				SenderId:       c.username,
 				ReceiverId:     recipientID,
 				RatchetMessage: pbRatchetMsg,
-				Timestamp:      timestamppb.Now(),
+				Timestamp:      ts,
 			},
 		},
 	}
 
-	if err := stream.Send(clientMsg); err != nil {
+	err = stream.Send(clientMsg)
+	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)
+	}
+
+	// if the message has been successfully uploaded to the server we can then store persistantly
+	// store it locally
+	err = c.localStore.StoreMessage(recipientID, LocalMessage{
+		FromLocal: true,
+		Content:   text,
+		Timestamp: ts.AsTime(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store message locally: %s", err)
 	}
 
 	return nil
@@ -515,6 +555,8 @@ func (c *RpcClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
 			log.Printf(
 				"failed to find one-time private key used, cannot establish shared secret properly",
 			)
+			c.otpMu.RUnlock()
+			return
 		}
 		c.otpMu.RUnlock()
 

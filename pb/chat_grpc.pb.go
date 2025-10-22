@@ -28,16 +28,10 @@ const (
 // ChatServiceClient is the client API for ChatService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// ChatService provides messaging and key exchange functionality
 type ChatServiceClient interface {
-	// Register a new user with identity keys and prekeys
 	Register(ctx context.Context, in *RegisterRequest, opts ...grpc.CallOption) (*RegisterResponse, error)
-	// Upload additional one-time prekeys
 	UploadOTPs(ctx context.Context, in *UploadOTPsRequest, opts ...grpc.CallOption) (*UploadOTPsResponse, error)
-	// Fetch a user's prekey bundle for initiating communication
 	FetchBundle(ctx context.Context, in *FetchBundleRequest, opts ...grpc.CallOption) (*FetchBundleResponse, error)
-	// Bidirectional stream for real-time messaging
 	MessageStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ClientMessage, ServerMessage], error)
 }
 
@@ -95,16 +89,10 @@ type ChatService_MessageStreamClient = grpc.BidiStreamingClient[ClientMessage, S
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility.
-//
-// ChatService provides messaging and key exchange functionality
 type ChatServiceServer interface {
-	// Register a new user with identity keys and prekeys
 	Register(context.Context, *RegisterRequest) (*RegisterResponse, error)
-	// Upload additional one-time prekeys
 	UploadOTPs(context.Context, *UploadOTPsRequest) (*UploadOTPsResponse, error)
-	// Fetch a user's prekey bundle for initiating communication
 	FetchBundle(context.Context, *FetchBundleRequest) (*FetchBundleResponse, error)
-	// Bidirectional stream for real-time messaging
 	MessageStream(grpc.BidiStreamingServer[ClientMessage, ServerMessage]) error
 	mustEmbedUnimplementedChatServiceServer()
 }

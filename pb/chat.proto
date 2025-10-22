@@ -3,22 +3,21 @@ package pch;
 option go_package = "github.com/nireo/pch/pb";
 import "google/protobuf/timestamp.proto";
 
-// ChatService provides messaging and key exchange functionality
+enum OfflineMessageKind {
+  OFFLINE_MESSAGE_NORMAL = 0;
+  OFFLINE_MESSAGE_KEY_EXCHANGE = 1;
+}
+
 service ChatService {
-  // Register a new user with identity keys and prekeys
   rpc Register(RegisterRequest) returns (RegisterResponse);
   
-  // Upload additional one-time prekeys
   rpc UploadOTPs(UploadOTPsRequest) returns (UploadOTPsResponse);
   
-  // Fetch a user's prekey bundle for initiating communication
   rpc FetchBundle(FetchBundleRequest) returns (FetchBundleResponse);
   
-  // Bidirectional stream for real-time messaging
   rpc MessageStream(stream ClientMessage) returns (stream ServerMessage);
 }
 
-// Registration messages
 message RegisterRequest {
   string username = 1;
   bytes identity_key = 2;
@@ -37,7 +36,6 @@ message SignedPrekey {
   google.protobuf.Timestamp created_at = 3;
 }
 
-// One-time prekey management
 message UploadOTPsRequest {
   string username = 1;
   repeated SignedPrekey one_time_prekeys = 2;
@@ -64,7 +62,6 @@ message PrekeyBundle {
   bytes one_time_prekey = 4;
 }
 
-// Streaming message types
 message ClientMessage {
   oneof message_type {
     JoinRequest join = 1;
@@ -83,7 +80,13 @@ message ServerMessage {
   }
 }
 
-// Join messages
+message OfflineMessage {
+  bytes payload = 1;
+  google.protobuf.Timestamp timestamp = 2; // so we can order them 
+  OfflineMessageKind kind = 3;
+  string from = 4;
+}
+
 message JoinRequest {
   string username = 1;
 }
@@ -91,9 +94,9 @@ message JoinRequest {
 message JoinResponse {
   string message = 1;
   google.protobuf.Timestamp timestamp = 2;
+  repeated OfflineMessage messages = 3;
 }
 
-// Key exchange for X3DH
 message KeyExchangeMessage {
   string sender_id = 1;
   string receiver_id = 2;
@@ -107,7 +110,6 @@ message InitialMessage {
   bytes one_time_prekey = 3;
 }
 
-// Encrypted messages with Double Ratchet
 message EncryptedMessage {
   string sender_id = 1;
   string receiver_id = 2;
@@ -123,12 +125,10 @@ message RatchetMessage {
   bytes nonce = 5;
 }
 
-// Heartbeat for connection keepalive
 message HeartbeatMessage {
   google.protobuf.Timestamp timestamp = 1;
 }
 
-// User storage record
 message UserRecord {
   string username = 1;
   bytes identity_key = 2;

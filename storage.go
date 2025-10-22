@@ -34,13 +34,13 @@ type UserRecord struct {
 type OfflineMessageKind int
 
 const (
-	EncryptedMessageKind OfflineMessageKind = iota
-	InitialMessageKind
+	OfflineMessageKeyExchange OfflineMessageKind = iota
+	OfflineMessageEncryptedMessage
 )
 
 type OfflineMessage struct {
 	Kind      OfflineMessageKind
-	Message   []byte
+	Content   []byte
 	Timestamp time.Time
 }
 
@@ -241,11 +241,6 @@ func (s *Storage) GetUser(username string) (*UserRecord, error) {
 	return &user, err
 }
 
-func (s *Storage) GetUserMessages(username string) ([]OfflineMessage, error) {
-	var messages []OfflineMessage
-	return messages, nil
-}
-
 func (s *Storage) AddUserMessage(
 	storedMessage OfflineMessage,
 	toUsername, fromUsername string,
@@ -263,7 +258,41 @@ func (s *Storage) AddUserMessage(
 			return fmt.Errorf("failed to encode message")
 		}
 
-		err = uBucket.Put([]byte(fromUsername), data)
-		return err
+		key := fmt.Sprintf("%d-%s", storedMessage.Timestamp.UnixNano(), fromUsername)
+		return uBucket.Put([]byte(key), data)
+	})
+}
+
+func (s *Storage) GetUserMessages(username string) ([]OfflineMessage, error) {
+	var messages []OfflineMessage
+
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(offlineMessages)
+
+		uBucket := b.Bucket([]byte(username))
+		if uBucket == nil {
+			return nil
+		}
+
+		return uBucket.ForEach(func(k, v []byte) error {
+			var msg OfflineMessage
+			if err := decodeGob(v, &msg); err != nil {
+				return fmt.Errorf("failed to decode message: %w", err)
+			}
+			messages = append(messages, msg)
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error while reading user messages: %s", err)
+	}
+
+	return messages, nil
+}
+
+func (s *Storage) DeleteUserMessages(username string) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(offlineMessages)
+		return b.DeleteBucket([]byte(username))
 	})
 }

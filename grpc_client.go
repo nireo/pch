@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sort"
 	"sync"
 
 	pb "github.com/nireo/pch/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -260,18 +262,50 @@ func (c *RpcClient) receiveMessages(stream pb.ChatService_MessageStreamClient) {
 	}
 }
 
+func (c *RpcClient) handleOfflineMessages(messages []*pb.OfflineMessage) {
+	if len(messages) == 0 {
+		return
+	}
+
+	// the messages are easiest to reason with when they're sorted
+	sort.Slice(messages, func(i int, j int) bool {
+		return messages[i].Timestamp.AsTime().Before(messages[j].Timestamp.AsTime())
+	})
+
+	for _, msg := range messages {
+		switch msg.Kind {
+		case pb.OfflineMessageKind_OFFLINE_MESSAGE_KEY_EXCHANGE:
+			keyExchange := &pb.KeyExchangeMessage{}
+			err := proto.Unmarshal(msg.Payload, keyExchange)
+			if err != nil {
+				log.Printf("failed to unmarshal key exchange: %v", err)
+				continue
+			}
+
+			c.handleKeyExchange(keyExchange)
+		case pb.OfflineMessageKind_OFFLINE_MESSAGE_NORMAL:
+			encMsg := &pb.EncryptedMessage{}
+			err := proto.Unmarshal(msg.Payload, encMsg)
+			if err != nil {
+				log.Printf("failed to unmarshal encrypted message: %v", err)
+				continue
+			}
+
+			c.handleEncryptedMessage(encMsg)
+		}
+	}
+}
+
 // handleServerMessage processes incoming server messages.
 func (c *RpcClient) handleServerMessage(msg *pb.ServerMessage) {
 	switch v := msg.MessageType.(type) {
 	case *pb.ServerMessage_JoinResponse:
-		log.Printf("Join response: %s", v.JoinResponse.Message)
-
+		c.handleOfflineMessages(v.JoinResponse.Messages)
+		log.Printf("join response: %s", v.JoinResponse.Message)
 	case *pb.ServerMessage_EncryptedMessage:
 		c.handleEncryptedMessage(v.EncryptedMessage)
-
 	case *pb.ServerMessage_KeyExchange:
 		c.handleKeyExchange(v.KeyExchange)
-
 	case *pb.ServerMessage_Heartbeat:
 		if v.Heartbeat.Timestamp != nil {
 			log.Printf("Heartbeat received at %v", v.Heartbeat.Timestamp.AsTime())

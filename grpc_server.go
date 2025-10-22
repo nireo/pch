@@ -139,22 +139,6 @@ func (r *RpcServer) Close() error {
 	return r.store.Close()
 }
 
-func (r *RpcServer) handleMessage(msg *pb.ClientMessage) error {
-	switch v := msg.MessageType.(type) {
-	case *pb.ClientMessage_Join:
-		// todo
-	case *pb.ClientMessage_EncryptedMessage:
-		// todo
-	case *pb.ClientMessage_Heartbeat:
-		// todo
-	case *pb.ClientMessage_KeyExchange:
-		// todo
-	default:
-		return fmt.Errorf("unknown message type: %T", v)
-	}
-	return nil
-}
-
 // MessageStream handles the bidirectional streaming RPC for chat messages.
 func (r *RpcServer) MessageStream(
 	stream pb.ChatService_MessageStreamServer,

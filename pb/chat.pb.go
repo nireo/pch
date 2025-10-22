@@ -7,12 +7,13 @@
 package pb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -22,7 +23,52 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Registration messages
+type OfflineMessageKind int32
+
+const (
+	OfflineMessageKind_OFFLINE_MESSAGE_NORMAL       OfflineMessageKind = 0
+	OfflineMessageKind_OFFLINE_MESSAGE_KEY_EXCHANGE OfflineMessageKind = 1
+)
+
+// Enum value maps for OfflineMessageKind.
+var (
+	OfflineMessageKind_name = map[int32]string{
+		0: "OFFLINE_MESSAGE_NORMAL",
+		1: "OFFLINE_MESSAGE_KEY_EXCHANGE",
+	}
+	OfflineMessageKind_value = map[string]int32{
+		"OFFLINE_MESSAGE_NORMAL":       0,
+		"OFFLINE_MESSAGE_KEY_EXCHANGE": 1,
+	}
+)
+
+func (x OfflineMessageKind) Enum() *OfflineMessageKind {
+	p := new(OfflineMessageKind)
+	*p = x
+	return p
+}
+
+func (x OfflineMessageKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (OfflineMessageKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_pb_chat_proto_enumTypes[0].Descriptor()
+}
+
+func (OfflineMessageKind) Type() protoreflect.EnumType {
+	return &file_pb_chat_proto_enumTypes[0]
+}
+
+func (x OfflineMessageKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use OfflineMessageKind.Descriptor instead.
+func (OfflineMessageKind) EnumDescriptor() ([]byte, []int) {
+	return file_pb_chat_proto_rawDescGZIP(), []int{0}
+}
+
 type RegisterRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Username       string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -203,7 +249,6 @@ func (x *SignedPrekey) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// One-time prekey management
 type UploadOTPsRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Username       string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -465,7 +510,6 @@ func (x *PrekeyBundle) GetOneTimePrekey() []byte {
 	return nil
 }
 
-// Streaming message types
 type ClientMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to MessageType:
@@ -694,7 +738,74 @@ func (*ServerMessage_EncryptedMessage) isServerMessage_MessageType() {}
 
 func (*ServerMessage_Heartbeat) isServerMessage_MessageType() {}
 
-// Join messages
+type OfflineMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Payload       []byte                 `protobuf:"bytes,1,opt,name=payload,proto3" json:"payload,omitempty"`
+	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // so we can order them
+	Kind          OfflineMessageKind     `protobuf:"varint,3,opt,name=kind,proto3,enum=pch.OfflineMessageKind" json:"kind,omitempty"`
+	From          string                 `protobuf:"bytes,4,opt,name=from,proto3" json:"from,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OfflineMessage) Reset() {
+	*x = OfflineMessage{}
+	mi := &file_pb_chat_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OfflineMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OfflineMessage) ProtoMessage() {}
+
+func (x *OfflineMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_pb_chat_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OfflineMessage.ProtoReflect.Descriptor instead.
+func (*OfflineMessage) Descriptor() ([]byte, []int) {
+	return file_pb_chat_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *OfflineMessage) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *OfflineMessage) GetTimestamp() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Timestamp
+	}
+	return nil
+}
+
+func (x *OfflineMessage) GetKind() OfflineMessageKind {
+	if x != nil {
+		return x.Kind
+	}
+	return OfflineMessageKind_OFFLINE_MESSAGE_NORMAL
+}
+
+func (x *OfflineMessage) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
 type JoinRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -704,7 +815,7 @@ type JoinRequest struct {
 
 func (x *JoinRequest) Reset() {
 	*x = JoinRequest{}
-	mi := &file_pb_chat_proto_msgTypes[10]
+	mi := &file_pb_chat_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -716,7 +827,7 @@ func (x *JoinRequest) String() string {
 func (*JoinRequest) ProtoMessage() {}
 
 func (x *JoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[10]
+	mi := &file_pb_chat_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -729,7 +840,7 @@ func (x *JoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinRequest.ProtoReflect.Descriptor instead.
 func (*JoinRequest) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{10}
+	return file_pb_chat_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *JoinRequest) GetUsername() string {
@@ -743,13 +854,14 @@ type JoinResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Messages      []*OfflineMessage      `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinResponse) Reset() {
 	*x = JoinResponse{}
-	mi := &file_pb_chat_proto_msgTypes[11]
+	mi := &file_pb_chat_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -761,7 +873,7 @@ func (x *JoinResponse) String() string {
 func (*JoinResponse) ProtoMessage() {}
 
 func (x *JoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[11]
+	mi := &file_pb_chat_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -774,7 +886,7 @@ func (x *JoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinResponse.ProtoReflect.Descriptor instead.
 func (*JoinResponse) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{11}
+	return file_pb_chat_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *JoinResponse) GetMessage() string {
@@ -791,7 +903,13 @@ func (x *JoinResponse) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
-// Key exchange for X3DH
+func (x *JoinResponse) GetMessages() []*OfflineMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
 type KeyExchangeMessage struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	SenderId       string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
@@ -804,7 +922,7 @@ type KeyExchangeMessage struct {
 
 func (x *KeyExchangeMessage) Reset() {
 	*x = KeyExchangeMessage{}
-	mi := &file_pb_chat_proto_msgTypes[12]
+	mi := &file_pb_chat_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -816,7 +934,7 @@ func (x *KeyExchangeMessage) String() string {
 func (*KeyExchangeMessage) ProtoMessage() {}
 
 func (x *KeyExchangeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[12]
+	mi := &file_pb_chat_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -829,7 +947,7 @@ func (x *KeyExchangeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyExchangeMessage.ProtoReflect.Descriptor instead.
 func (*KeyExchangeMessage) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{12}
+	return file_pb_chat_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *KeyExchangeMessage) GetSenderId() string {
@@ -871,7 +989,7 @@ type InitialMessage struct {
 
 func (x *InitialMessage) Reset() {
 	*x = InitialMessage{}
-	mi := &file_pb_chat_proto_msgTypes[13]
+	mi := &file_pb_chat_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -883,7 +1001,7 @@ func (x *InitialMessage) String() string {
 func (*InitialMessage) ProtoMessage() {}
 
 func (x *InitialMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[13]
+	mi := &file_pb_chat_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -896,7 +1014,7 @@ func (x *InitialMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InitialMessage.ProtoReflect.Descriptor instead.
 func (*InitialMessage) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{13}
+	return file_pb_chat_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *InitialMessage) GetIdentityKey() []byte {
@@ -920,7 +1038,6 @@ func (x *InitialMessage) GetOneTimePrekey() []byte {
 	return nil
 }
 
-// Encrypted messages with Double Ratchet
 type EncryptedMessage struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	SenderId       string                 `protobuf:"bytes,1,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
@@ -933,7 +1050,7 @@ type EncryptedMessage struct {
 
 func (x *EncryptedMessage) Reset() {
 	*x = EncryptedMessage{}
-	mi := &file_pb_chat_proto_msgTypes[14]
+	mi := &file_pb_chat_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -945,7 +1062,7 @@ func (x *EncryptedMessage) String() string {
 func (*EncryptedMessage) ProtoMessage() {}
 
 func (x *EncryptedMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[14]
+	mi := &file_pb_chat_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -958,7 +1075,7 @@ func (x *EncryptedMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EncryptedMessage.ProtoReflect.Descriptor instead.
 func (*EncryptedMessage) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{14}
+	return file_pb_chat_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EncryptedMessage) GetSenderId() string {
@@ -1002,7 +1119,7 @@ type RatchetMessage struct {
 
 func (x *RatchetMessage) Reset() {
 	*x = RatchetMessage{}
-	mi := &file_pb_chat_proto_msgTypes[15]
+	mi := &file_pb_chat_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1014,7 +1131,7 @@ func (x *RatchetMessage) String() string {
 func (*RatchetMessage) ProtoMessage() {}
 
 func (x *RatchetMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[15]
+	mi := &file_pb_chat_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1027,7 +1144,7 @@ func (x *RatchetMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RatchetMessage.ProtoReflect.Descriptor instead.
 func (*RatchetMessage) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{15}
+	return file_pb_chat_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RatchetMessage) GetPublicKey() []byte {
@@ -1065,7 +1182,6 @@ func (x *RatchetMessage) GetNonce() []byte {
 	return nil
 }
 
-// Heartbeat for connection keepalive
 type HeartbeatMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
@@ -1075,7 +1191,7 @@ type HeartbeatMessage struct {
 
 func (x *HeartbeatMessage) Reset() {
 	*x = HeartbeatMessage{}
-	mi := &file_pb_chat_proto_msgTypes[16]
+	mi := &file_pb_chat_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1087,7 +1203,7 @@ func (x *HeartbeatMessage) String() string {
 func (*HeartbeatMessage) ProtoMessage() {}
 
 func (x *HeartbeatMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[16]
+	mi := &file_pb_chat_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1100,7 +1216,7 @@ func (x *HeartbeatMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeartbeatMessage.ProtoReflect.Descriptor instead.
 func (*HeartbeatMessage) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{16}
+	return file_pb_chat_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *HeartbeatMessage) GetTimestamp() *timestamppb.Timestamp {
@@ -1110,7 +1226,6 @@ func (x *HeartbeatMessage) GetTimestamp() *timestamppb.Timestamp {
 	return nil
 }
 
-// User storage record
 type UserRecord struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
@@ -1125,7 +1240,7 @@ type UserRecord struct {
 
 func (x *UserRecord) Reset() {
 	*x = UserRecord{}
-	mi := &file_pb_chat_proto_msgTypes[17]
+	mi := &file_pb_chat_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1137,7 +1252,7 @@ func (x *UserRecord) String() string {
 func (*UserRecord) ProtoMessage() {}
 
 func (x *UserRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_pb_chat_proto_msgTypes[17]
+	mi := &file_pb_chat_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1150,7 +1265,7 @@ func (x *UserRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserRecord.ProtoReflect.Descriptor instead.
 func (*UserRecord) Descriptor() ([]byte, []int) {
-	return file_pb_chat_proto_rawDescGZIP(), []int{17}
+	return file_pb_chat_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UserRecord) GetUsername() string {
@@ -1241,12 +1356,18 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\fkey_exchange\x18\x02 \x01(\v2\x17.pch.KeyExchangeMessageH\x00R\vkeyExchange\x12D\n" +
 	"\x11encrypted_message\x18\x03 \x01(\v2\x15.pch.EncryptedMessageH\x00R\x10encryptedMessage\x125\n" +
 	"\theartbeat\x18\x04 \x01(\v2\x15.pch.HeartbeatMessageH\x00R\theartbeatB\x0e\n" +
-	"\fmessage_type\")\n" +
+	"\fmessage_type\"\xa5\x01\n" +
+	"\x0eOfflineMessage\x12\x18\n" +
+	"\apayload\x18\x01 \x01(\fR\apayload\x128\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12+\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x17.pch.OfflineMessageKindR\x04kind\x12\x12\n" +
+	"\x04from\x18\x04 \x01(\tR\x04from\")\n" +
 	"\vJoinRequest\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"b\n" +
+	"\busername\x18\x01 \x01(\tR\busername\"\x93\x01\n" +
 	"\fJoinResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x128\n" +
-	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"\xca\x01\n" +
+	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12/\n" +
+	"\bmessages\x18\x03 \x03(\v2\x13.pch.OfflineMessageR\bmessages\"\xca\x01\n" +
 	"\x12KeyExchangeMessage\x12\x1b\n" +
 	"\tsender_id\x18\x01 \x01(\tR\bsenderId\x12\x1f\n" +
 	"\vreceiver_id\x18\x02 \x01(\tR\n" +
@@ -1282,7 +1403,10 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\rsigned_prekey\x18\x04 \x01(\v2\x11.pch.SignedPrekeyR\fsignedPrekey\x129\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x127\n" +
-	"\tlast_seen\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen2\x84\x02\n" +
+	"\tlast_seen\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blastSeen*R\n" +
+	"\x12OfflineMessageKind\x12\x1a\n" +
+	"\x16OFFLINE_MESSAGE_NORMAL\x10\x00\x12 \n" +
+	"\x1cOFFLINE_MESSAGE_KEY_EXCHANGE\x10\x012\x84\x02\n" +
 	"\vChatService\x127\n" +
 	"\bRegister\x12\x14.pch.RegisterRequest\x1a\x15.pch.RegisterResponse\x12=\n" +
 	"\n" +
@@ -1302,64 +1426,73 @@ func file_pb_chat_proto_rawDescGZIP() []byte {
 	return file_pb_chat_proto_rawDescData
 }
 
-var file_pb_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
-var file_pb_chat_proto_goTypes = []any{
-	(*RegisterRequest)(nil),       // 0: pch.RegisterRequest
-	(*RegisterResponse)(nil),      // 1: pch.RegisterResponse
-	(*SignedPrekey)(nil),          // 2: pch.SignedPrekey
-	(*UploadOTPsRequest)(nil),     // 3: pch.UploadOTPsRequest
-	(*UploadOTPsResponse)(nil),    // 4: pch.UploadOTPsResponse
-	(*FetchBundleRequest)(nil),    // 5: pch.FetchBundleRequest
-	(*FetchBundleResponse)(nil),   // 6: pch.FetchBundleResponse
-	(*PrekeyBundle)(nil),          // 7: pch.PrekeyBundle
-	(*ClientMessage)(nil),         // 8: pch.ClientMessage
-	(*ServerMessage)(nil),         // 9: pch.ServerMessage
-	(*JoinRequest)(nil),           // 10: pch.JoinRequest
-	(*JoinResponse)(nil),          // 11: pch.JoinResponse
-	(*KeyExchangeMessage)(nil),    // 12: pch.KeyExchangeMessage
-	(*InitialMessage)(nil),        // 13: pch.InitialMessage
-	(*EncryptedMessage)(nil),      // 14: pch.EncryptedMessage
-	(*RatchetMessage)(nil),        // 15: pch.RatchetMessage
-	(*HeartbeatMessage)(nil),      // 16: pch.HeartbeatMessage
-	(*UserRecord)(nil),            // 17: pch.UserRecord
-	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
-}
+var (
+	file_pb_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+	file_pb_chat_proto_msgTypes  = make([]protoimpl.MessageInfo, 19)
+	file_pb_chat_proto_goTypes   = []any{
+		(OfflineMessageKind)(0),       // 0: pch.OfflineMessageKind
+		(*RegisterRequest)(nil),       // 1: pch.RegisterRequest
+		(*RegisterResponse)(nil),      // 2: pch.RegisterResponse
+		(*SignedPrekey)(nil),          // 3: pch.SignedPrekey
+		(*UploadOTPsRequest)(nil),     // 4: pch.UploadOTPsRequest
+		(*UploadOTPsResponse)(nil),    // 5: pch.UploadOTPsResponse
+		(*FetchBundleRequest)(nil),    // 6: pch.FetchBundleRequest
+		(*FetchBundleResponse)(nil),   // 7: pch.FetchBundleResponse
+		(*PrekeyBundle)(nil),          // 8: pch.PrekeyBundle
+		(*ClientMessage)(nil),         // 9: pch.ClientMessage
+		(*ServerMessage)(nil),         // 10: pch.ServerMessage
+		(*OfflineMessage)(nil),        // 11: pch.OfflineMessage
+		(*JoinRequest)(nil),           // 12: pch.JoinRequest
+		(*JoinResponse)(nil),          // 13: pch.JoinResponse
+		(*KeyExchangeMessage)(nil),    // 14: pch.KeyExchangeMessage
+		(*InitialMessage)(nil),        // 15: pch.InitialMessage
+		(*EncryptedMessage)(nil),      // 16: pch.EncryptedMessage
+		(*RatchetMessage)(nil),        // 17: pch.RatchetMessage
+		(*HeartbeatMessage)(nil),      // 18: pch.HeartbeatMessage
+		(*UserRecord)(nil),            // 19: pch.UserRecord
+		(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
+	}
+)
+
 var file_pb_chat_proto_depIdxs = []int32{
-	2,  // 0: pch.RegisterRequest.signed_prekey:type_name -> pch.SignedPrekey
-	2,  // 1: pch.RegisterRequest.one_time_prekeys:type_name -> pch.SignedPrekey
-	18, // 2: pch.SignedPrekey.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 3: pch.UploadOTPsRequest.one_time_prekeys:type_name -> pch.SignedPrekey
-	7,  // 4: pch.FetchBundleResponse.bundle:type_name -> pch.PrekeyBundle
-	10, // 5: pch.ClientMessage.join:type_name -> pch.JoinRequest
-	12, // 6: pch.ClientMessage.key_exchange:type_name -> pch.KeyExchangeMessage
-	14, // 7: pch.ClientMessage.encrypted_message:type_name -> pch.EncryptedMessage
-	16, // 8: pch.ClientMessage.heartbeat:type_name -> pch.HeartbeatMessage
-	11, // 9: pch.ServerMessage.join_response:type_name -> pch.JoinResponse
-	12, // 10: pch.ServerMessage.key_exchange:type_name -> pch.KeyExchangeMessage
-	14, // 11: pch.ServerMessage.encrypted_message:type_name -> pch.EncryptedMessage
-	16, // 12: pch.ServerMessage.heartbeat:type_name -> pch.HeartbeatMessage
-	18, // 13: pch.JoinResponse.timestamp:type_name -> google.protobuf.Timestamp
-	13, // 14: pch.KeyExchangeMessage.initial_message:type_name -> pch.InitialMessage
-	18, // 15: pch.KeyExchangeMessage.timestamp:type_name -> google.protobuf.Timestamp
-	15, // 16: pch.EncryptedMessage.ratchet_message:type_name -> pch.RatchetMessage
-	18, // 17: pch.EncryptedMessage.timestamp:type_name -> google.protobuf.Timestamp
-	18, // 18: pch.HeartbeatMessage.timestamp:type_name -> google.protobuf.Timestamp
-	2,  // 19: pch.UserRecord.signed_prekey:type_name -> pch.SignedPrekey
-	18, // 20: pch.UserRecord.created_at:type_name -> google.protobuf.Timestamp
-	18, // 21: pch.UserRecord.last_seen:type_name -> google.protobuf.Timestamp
-	0,  // 22: pch.ChatService.Register:input_type -> pch.RegisterRequest
-	3,  // 23: pch.ChatService.UploadOTPs:input_type -> pch.UploadOTPsRequest
-	5,  // 24: pch.ChatService.FetchBundle:input_type -> pch.FetchBundleRequest
-	8,  // 25: pch.ChatService.MessageStream:input_type -> pch.ClientMessage
-	1,  // 26: pch.ChatService.Register:output_type -> pch.RegisterResponse
-	4,  // 27: pch.ChatService.UploadOTPs:output_type -> pch.UploadOTPsResponse
-	6,  // 28: pch.ChatService.FetchBundle:output_type -> pch.FetchBundleResponse
-	9,  // 29: pch.ChatService.MessageStream:output_type -> pch.ServerMessage
-	26, // [26:30] is the sub-list for method output_type
-	22, // [22:26] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	3,  // 0: pch.RegisterRequest.signed_prekey:type_name -> pch.SignedPrekey
+	3,  // 1: pch.RegisterRequest.one_time_prekeys:type_name -> pch.SignedPrekey
+	20, // 2: pch.SignedPrekey.created_at:type_name -> google.protobuf.Timestamp
+	3,  // 3: pch.UploadOTPsRequest.one_time_prekeys:type_name -> pch.SignedPrekey
+	8,  // 4: pch.FetchBundleResponse.bundle:type_name -> pch.PrekeyBundle
+	12, // 5: pch.ClientMessage.join:type_name -> pch.JoinRequest
+	14, // 6: pch.ClientMessage.key_exchange:type_name -> pch.KeyExchangeMessage
+	16, // 7: pch.ClientMessage.encrypted_message:type_name -> pch.EncryptedMessage
+	18, // 8: pch.ClientMessage.heartbeat:type_name -> pch.HeartbeatMessage
+	13, // 9: pch.ServerMessage.join_response:type_name -> pch.JoinResponse
+	14, // 10: pch.ServerMessage.key_exchange:type_name -> pch.KeyExchangeMessage
+	16, // 11: pch.ServerMessage.encrypted_message:type_name -> pch.EncryptedMessage
+	18, // 12: pch.ServerMessage.heartbeat:type_name -> pch.HeartbeatMessage
+	20, // 13: pch.OfflineMessage.timestamp:type_name -> google.protobuf.Timestamp
+	0,  // 14: pch.OfflineMessage.kind:type_name -> pch.OfflineMessageKind
+	20, // 15: pch.JoinResponse.timestamp:type_name -> google.protobuf.Timestamp
+	11, // 16: pch.JoinResponse.messages:type_name -> pch.OfflineMessage
+	15, // 17: pch.KeyExchangeMessage.initial_message:type_name -> pch.InitialMessage
+	20, // 18: pch.KeyExchangeMessage.timestamp:type_name -> google.protobuf.Timestamp
+	17, // 19: pch.EncryptedMessage.ratchet_message:type_name -> pch.RatchetMessage
+	20, // 20: pch.EncryptedMessage.timestamp:type_name -> google.protobuf.Timestamp
+	20, // 21: pch.HeartbeatMessage.timestamp:type_name -> google.protobuf.Timestamp
+	3,  // 22: pch.UserRecord.signed_prekey:type_name -> pch.SignedPrekey
+	20, // 23: pch.UserRecord.created_at:type_name -> google.protobuf.Timestamp
+	20, // 24: pch.UserRecord.last_seen:type_name -> google.protobuf.Timestamp
+	1,  // 25: pch.ChatService.Register:input_type -> pch.RegisterRequest
+	4,  // 26: pch.ChatService.UploadOTPs:input_type -> pch.UploadOTPsRequest
+	6,  // 27: pch.ChatService.FetchBundle:input_type -> pch.FetchBundleRequest
+	9,  // 28: pch.ChatService.MessageStream:input_type -> pch.ClientMessage
+	2,  // 29: pch.ChatService.Register:output_type -> pch.RegisterResponse
+	5,  // 30: pch.ChatService.UploadOTPs:output_type -> pch.UploadOTPsResponse
+	7,  // 31: pch.ChatService.FetchBundle:output_type -> pch.FetchBundleResponse
+	10, // 32: pch.ChatService.MessageStream:output_type -> pch.ServerMessage
+	29, // [29:33] is the sub-list for method output_type
+	25, // [25:29] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_pb_chat_proto_init() }
@@ -1384,13 +1517,14 @@ func file_pb_chat_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pb_chat_proto_rawDesc), len(file_pb_chat_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   18,
+			NumEnums:      1,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_pb_chat_proto_goTypes,
 		DependencyIndexes: file_pb_chat_proto_depIdxs,
+		EnumInfos:         file_pb_chat_proto_enumTypes,
 		MessageInfos:      file_pb_chat_proto_msgTypes,
 	}.Build()
 	File_pb_chat_proto = out.File

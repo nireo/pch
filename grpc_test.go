@@ -189,7 +189,9 @@ func TestMultipleMessages(t *testing.T) {
 	lis := bufconn.Listen(bufSize)
 	s := grpc.NewServer()
 
-	server, err := NewRpcServer(":memory:")
+	tpath := path.Join(t.TempDir(), "server.db")
+
+	server, err := NewRpcServer(tpath)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}
@@ -269,7 +271,8 @@ func TestMessageWithoutKeyExchange(t *testing.T) {
 	lis := bufconn.Listen(bufSize)
 	s := grpc.NewServer()
 
-	server, err := NewRpcServer(":memory:")
+	tpath := path.Join(t.TempDir(), "server.db")
+	server, err := NewRpcServer(tpath)
 	if err != nil {
 		t.Fatalf("Failed to create server: %v", err)
 	}

@@ -10,10 +10,12 @@ import (
 	"log"
 	"sort"
 	"sync"
+	"time"
 
 	pb "github.com/nireo/pch/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -41,7 +43,17 @@ type RpcClient struct {
 
 // NewRpcClient creates a new gRPC client connected to the specified address.
 func NewRpcClient(addr string, username string, localStorePath string) (*RpcClient, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	kacp := keepalive.ClientParameters{
+		Time:                15 * time.Second,
+		Timeout:             5 * time.Second,
+		PermitWithoutStream: true,
+	}
+
+	conn, err := grpc.NewClient(
+		addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithKeepaliveParams(kacp),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("error making client: %v", err)
 	}

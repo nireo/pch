@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "github.com/nireo/pch/pb"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -180,16 +181,46 @@ func (r *RpcServer) MessageStream(
 
 			log.Printf("client joined: %s", username)
 
+			offlineMsgs, err := r.store.GetUserMessages(username)
+			if err != nil {
+				log.Printf("failed to offline messages: %s", err)
+				offlineMsgs = nil
+			}
+
+			pbOffline := make([]*pb.OfflineMessage, 0, len(offlineMsgs))
+			for _, msg := range offlineMsgs {
+				var kind pb.OfflineMessageKind
+				switch msg.Kind {
+				case OfflineMessageEncryptedMessage:
+					kind = pb.OfflineMessageKind_OFFLINE_MESSAGE_NORMAL
+				case OfflineMessageKeyExchange:
+					kind = pb.OfflineMessageKind_OFFLINE_MESSAGE_KEY_EXCHANGE
+				}
+
+				pbOffline = append(pbOffline, &pb.OfflineMessage{
+					Payload:   msg.Content,
+					Timestamp: timestamppb.New(msg.Timestamp),
+					Kind:      kind,
+				})
+			}
+
 			if err := stream.Send(&pb.ServerMessage{
 				MessageType: &pb.ServerMessage_JoinResponse{
 					JoinResponse: &pb.JoinResponse{
 						Timestamp: timestamppb.Now(),
 						Message:   "successfully joined",
+						Messages:  pbOffline,
 					},
 				},
 			}); err != nil {
 				log.Printf("failed to send join ack: %v", err)
-				return err
+			}
+
+			if len(offlineMsgs) > 0 {
+				log.Printf("delivered %d offline messages to %s", len(offlineMsgs), username)
+				if err := r.store.DeleteUserMessages(username); err != nil {
+					log.Printf("failed to delete offline messages: %v", err)
+				}
 			}
 
 		case *pb.ClientMessage_EncryptedMessage:
@@ -220,6 +251,26 @@ func (r *RpcServer) MessageStream(
 				}
 			} else {
 				log.Printf("Recipient %s offline, ", v.EncryptedMessage.ReceiverId)
+				payload, err := proto.Marshal(&pb.EncryptedMessage{
+					SenderId:       username,
+					ReceiverId:     v.EncryptedMessage.ReceiverId,
+					RatchetMessage: v.EncryptedMessage.RatchetMessage,
+					Timestamp:      timestamppb.Now(),
+				})
+				if err != nil {
+					log.Printf("failed to marshal message: %v", err)
+					return err
+				}
+
+				offlineMsg := OfflineMessage{
+					Kind:      OfflineMessageEncryptedMessage,
+					Content:   payload,
+					Timestamp: time.Now(),
+				}
+				err = r.store.AddUserMessage(offlineMsg, v.EncryptedMessage.ReceiverId, username)
+				if err != nil {
+					log.Printf("failed to add user message: %v", err)
+				}
 			}
 
 		case *pb.ClientMessage_KeyExchange:
@@ -250,6 +301,27 @@ func (r *RpcServer) MessageStream(
 			} else {
 				log.Printf("recipient %s offline for key exchange",
 					v.KeyExchange.ReceiverId)
+
+				payload, err := proto.Marshal(&pb.KeyExchangeMessage{
+					SenderId:       username,
+					ReceiverId:     v.KeyExchange.ReceiverId,
+					InitialMessage: v.KeyExchange.InitialMessage,
+					Timestamp:      timestamppb.Now(),
+				})
+				if err != nil {
+					log.Printf("failed to marshal key exchange: %v", err)
+					return err
+				}
+
+				offlineMsg := OfflineMessage{
+					Kind:      OfflineMessageKeyExchange,
+					Content:   payload,
+					Timestamp: time.Now(),
+				}
+				err = r.store.AddUserMessage(offlineMsg, v.KeyExchange.ReceiverId, username)
+				if err != nil {
+					log.Printf("failed to store offline key exchange: %v", err)
+				}
 			}
 
 		case *pb.ClientMessage_Heartbeat:

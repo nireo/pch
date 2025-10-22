@@ -307,3 +307,256 @@ func TestMessageWithoutKeyExchange(t *testing.T) {
 		t.Errorf("Expected error '%s', got '%s'", expectedErr, err.Error())
 	}
 }
+
+func TestOfflineMessageDelivery(t *testing.T) {
+	lis := bufconn.Listen(bufSize)
+	s := grpc.NewServer()
+
+	tpath := path.Join(t.TempDir(), "server.db")
+	server, err := NewRpcServer(tpath)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+	defer server.Close()
+
+	pb.RegisterChatServiceServer(s, server)
+
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			t.Logf("Server exited: %v", err)
+		}
+	}()
+	defer s.Stop()
+
+	bufDialer := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	ctx := context.Background()
+
+	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	defer alice.Close()
+	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	defer bob.Close()
+
+	alice.Register(ctx, "alice")
+	bob.Register(ctx, "bob")
+
+	alice.StartChat(ctx, "alice")
+	time.Sleep(100 * time.Millisecond)
+
+	alice.InitiateChat(ctx, "bob")
+	time.Sleep(500 * time.Millisecond)
+
+	offlineMessage := "Hey Bob, you're offline but you'll get this later!"
+	if err := alice.SendMessage("bob", offlineMessage); err != nil {
+		t.Fatalf("Failed to send offline message: %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+
+	var receivedMsg string
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	bob.onMessageReceived = func(from, message string) {
+		if from == "alice" {
+			receivedMsg = message
+			wg.Done()
+		}
+	}
+
+	bob.StartChat(ctx, "bob")
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if receivedMsg != offlineMessage {
+			t.Errorf("Expected message '%s', got '%s'", offlineMessage, receivedMsg)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timeout waiting for offline message")
+	}
+}
+
+func TestOfflineKeyExchange(t *testing.T) {
+	lis := bufconn.Listen(bufSize)
+	s := grpc.NewServer()
+
+	tpath := path.Join(t.TempDir(), "server.db")
+	server, err := NewRpcServer(tpath)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+	defer server.Close()
+
+	pb.RegisterChatServiceServer(s, server)
+
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			t.Logf("Server exited: %v", err)
+		}
+	}()
+	defer s.Stop()
+
+	bufDialer := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	ctx := context.Background()
+
+	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	defer alice.Close()
+	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	defer bob.Close()
+
+	alice.Register(ctx, "alice")
+	bob.Register(ctx, "bob")
+
+	alice.StartChat(ctx, "alice")
+	time.Sleep(100 * time.Millisecond)
+
+	if err := alice.InitiateChat(ctx, "bob"); err != nil {
+		t.Fatalf("Failed to initiate chat: %v", err)
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	bob.StartChat(ctx, "bob")
+	time.Sleep(1 * time.Second)
+
+	if !bob.HasConversation("alice") {
+		t.Fatal("Bob should have conversation with alice after receiving offline key exchange")
+	}
+
+	var receivedMsg string
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	bob.onMessageReceived = func(from, message string) {
+		if from == "alice" {
+			receivedMsg = message
+			wg.Done()
+		}
+	}
+
+	testMessage := "This message comes after offline key exchange"
+	if err := alice.SendMessage("bob", testMessage); err != nil {
+		t.Fatalf("Failed to send message: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if receivedMsg != testMessage {
+			t.Errorf("Expected message '%s', got '%s'", testMessage, receivedMsg)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Timeout waiting for message after offline key exchange")
+	}
+}
+
+func TestMultipleOfflineMessages(t *testing.T) {
+	lis := bufconn.Listen(bufSize)
+	s := grpc.NewServer()
+
+	tpath := path.Join(t.TempDir(), "server.db")
+	server, err := NewRpcServer(tpath)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+	defer server.Close()
+
+	pb.RegisterChatServiceServer(s, server)
+
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			t.Logf("Server exited: %v", err)
+		}
+	}()
+	defer s.Stop()
+
+	bufDialer := func(context.Context, string) (net.Conn, error) {
+		return lis.Dial()
+	}
+
+	ctx := context.Background()
+
+	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	defer alice.Close()
+	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	defer bob.Close()
+
+	alice.Register(ctx, "alice")
+	bob.Register(ctx, "bob")
+	alice.StartChat(ctx, "alice")
+	time.Sleep(100 * time.Millisecond)
+
+	alice.InitiateChat(ctx, "bob")
+	time.Sleep(500 * time.Millisecond)
+
+	messages := []string{
+		"Offline message 1",
+		"Offline message 2",
+		"Offline message 3",
+		"Offline message 4",
+		"Offline message 5",
+	}
+
+	for _, msg := range messages {
+		if err := alice.SendMessage("bob", msg); err != nil {
+			t.Fatalf("Failed to send message '%s': %v", msg, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	var receivedMessages []string
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	wg.Add(len(messages))
+
+	bob.onMessageReceived = func(from, message string) {
+		if from == "alice" {
+			mu.Lock()
+			receivedMessages = append(receivedMessages, message)
+			mu.Unlock()
+			wg.Done()
+		}
+	}
+
+	bob.StartChat(ctx, "bob")
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		if len(receivedMessages) != len(messages) {
+			t.Fatalf("Expected %d messages, got %d", len(messages), len(receivedMessages))
+		}
+		for i, expected := range messages {
+			if receivedMessages[i] != expected {
+				t.Errorf("Message %d: expected '%s', got '%s'", i, expected, receivedMessages[i])
+			}
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf(
+			"Timeout waiting for offline messages. Received %d/%d",
+			len(receivedMessages),
+			len(messages),
+		)
+	}
+}

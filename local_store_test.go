@@ -126,7 +126,7 @@ func TestLocalStore_StoreAndGetMessages(t *testing.T) {
 		t.Errorf("expected content %q, got %q", msg.Content, messages[0].Content)
 	}
 
-	if messages[0].FromLocal {
+	if !messages[0].FromLocal {
 		t.Errorf("expected sender message from local")
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/nireo/pch"
 	pb "github.com/nireo/pch/pb"
@@ -37,12 +38,12 @@ func main() {
 	}()
 
 	keepaliveParams := keepalive.ServerParameters{
-		Time:    30,
-		Timeout: 10,
+		Time:    30 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 
 	keepaliveEnforcement := keepalive.EnforcementPolicy{
-		MinTime:             5,
+		MinTime:             5 * time.Second,
 		PermitWithoutStream: true,
 	}
 

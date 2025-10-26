@@ -80,8 +80,6 @@ func main() {
 	}
 	fmt.Println("connected")
 
-	time.Sleep(500 * time.Millisecond)
-
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Print("> ")
 

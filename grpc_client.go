@@ -248,10 +248,13 @@ func (c *RpcClient) StartChat(
 		},
 	}
 
+	log.Printf("sending join message")
+
 	if err := stream.Send(joinMsg); err != nil {
 		return nil, fmt.Errorf("failed to send join message: %v", err)
 	}
 
+	log.Printf("receiving messages")
 	go c.receiveMessages(stream)
 	return stream, nil
 }

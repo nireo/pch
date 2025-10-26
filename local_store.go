@@ -3,6 +3,7 @@ package pch
 import (
 	"crypto/ecdh"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,15 @@ import (
 var (
 	localOtpBucket  = []byte("otps")
 	localChatBucket = []byte("chats")
+	localKeysBucket = []byte("keys")
+
+	signingKey   = []byte("skey")
+	identityKey  = []byte("idk")
+	signedPreKey = []byte("spkey")
+	verifyingKey = []byte("vkey")
+
+	ErrUserNotFound = errors.New("keys not found for user")
+	ErrMissingKeys  = errors.New("missing keys")
 )
 
 // LocalStore stores the chats between different users. Generally, in these end-to-end encrypted
@@ -41,6 +51,11 @@ func (l *LocalStore) ensureBuckets() error {
 			return err
 		}
 		_, err = tx.CreateBucketIfNotExists(localChatBucket)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.CreateBucketIfNotExists(localKeysBucket)
 		return err
 	})
 }
@@ -170,4 +185,91 @@ func (l *LocalStore) GetMessages(chatPerson string) ([]LocalMessage, error) {
 		})
 	})
 	return messages, err
+}
+
+// StoreX3DHState stores the private keys for the X3DH state such that it's persisted between
+// sessions. It stores only the private keys since the public keys can easily be derived from those.
+func (l *LocalStore) StoreX3DHState(state *X3DHUser) error {
+	err := l.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localKeysBucket)
+
+		uBucket, err := b.CreateBucketIfNotExists([]byte(state.Username))
+		if err != nil {
+			return err
+		}
+
+		err = uBucket.Put(identityKey, state.IdentityPrivateKey.Bytes())
+		if err != nil {
+			return err
+		}
+
+		err = uBucket.Put(signedPreKey, state.SignedPrekeyPrivate.Bytes())
+		if err != nil {
+			return err
+		}
+
+		err = uBucket.Put(signingKey, state.SigningKey)
+		if err != nil {
+			return err
+		}
+
+		err = uBucket.Put(verifyingKey, state.VerifyingKey)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	return err
+}
+
+// GetX3DHState reads a given user's state from the database and constructs the given state
+func (l *LocalStore) GetX3DHState(username string) (*X3DHUser, error) {
+	state := &X3DHUser{}
+	err := l.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localKeysBucket)
+		uBucket := b.Bucket([]byte(username))
+		if uBucket == nil {
+			return ErrUserNotFound
+		}
+
+		v := uBucket.Get(identityKey)
+		if v == nil {
+			return ErrMissingKeys
+		}
+
+		var err error
+		state.IdentityPrivateKey, err = ecdh.X25519().NewPrivateKey(v)
+		if err != nil {
+			return err
+		}
+		state.IdentityPublicKey = state.IdentityPrivateKey.PublicKey()
+
+		v = uBucket.Get(signedPreKey)
+		if v == nil {
+			return ErrMissingKeys
+		}
+		state.SignedPrekeyPrivate, err = ecdh.X25519().NewPrivateKey(v)
+		if err != nil {
+			return err
+		}
+		state.SignedPrekeyPublic = state.SignedPrekeyPrivate.PublicKey()
+
+		v = uBucket.Get(signingKey)
+		if v == nil {
+			return ErrMissingKeys
+		}
+		copy(state.SigningKey, v)
+
+		v = uBucket.Get(verifyingKey)
+		if v == nil {
+			return ErrMissingKeys
+		}
+		copy(state.VerifyingKey, v)
+		return nil
+	})
+
+	state.Username = username
+	return nil, err
 }

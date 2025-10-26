@@ -14,4 +14,6 @@ Currently the server supports having conversations between two terminals the UI 
 - [x] Store the user's OTP on disk.
 - [x] Store messages persistently
 - [ ] Proper terminal interface
-
+- [ ] Auth challenge from server to verify identity
+- [ ] Persisting keys between sessions
+- [ ] Automatically update keys in some time frame

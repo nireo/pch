@@ -21,7 +21,8 @@ type PrekeyBundle struct {
 }
 
 // X3DHUser represents a user in the Extended Triple Diffie-Hellman key
-// exchange.
+// exchange. The user state is not thread safe so the caller is responsible
+// for hanlding that
 type X3DHUser struct {
 	// user's long-term identity keys these are permanent and used to
 	// identify the user.

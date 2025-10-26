@@ -4,6 +4,8 @@ The code contains a X3DH implementation as described [here](https://signal.org/d
 
 The communication between clients and the server is done using gRPC and the proto definitions can be found in the `/proto`. Since the client does a lot of the heavy lifting the gRPC server should not be used without the client together. Both crypto implementations are pretty well documented with comments.
 
+Currently the server supports having conversations between two terminals the UI is just lacking.
+
 ## TODO
 
 - [x] X3DH

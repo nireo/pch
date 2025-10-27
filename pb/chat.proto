@@ -28,6 +28,7 @@ message RegisterRequest {
 
 message RegisterResponse {
   string message = 1;
+  bytes auth_challenge = 2;
 }
 
 message SignedPrekey {
@@ -89,6 +90,7 @@ message OfflineMessage {
 
 message JoinRequest {
   string username = 1;
+  bytes signature = 2;
 }
 
 message JoinResponse {

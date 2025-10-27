@@ -161,17 +161,42 @@ func createTestClient(
 		return nil, fmt.Errorf("failed to create connection: %v", err)
 	}
 
-	user, err := NewX3DFUser(username)
-	if err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("failed to create user: %v", err)
-	}
-
 	localPath := path.Join(t.TempDir(), "localstore.db")
 	ls, err := NewLocalStore(localPath)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to store local store: %v", err)
+	}
+
+	var user *X3DHUser
+
+	storedUser, err := ls.GetX3DHState(username)
+	if err == nil {
+		user = storedUser
+	} else if err == ErrUserNotFound {
+		// the user is not found so we should generate it
+		newUser, err := NewX3DFUser(username)
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to create user: %v", err)
+		}
+
+		err = newUser.GeneratePrekeys(false)
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to generate prekeys, %v", err)
+		}
+
+		err = ls.StoreX3DHState(newUser)
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to store user data: %v", err)
+		}
+		user = newUser
+	} else {
+		// real error something is wrong
+		conn.Close()
+		return nil, fmt.Errorf("failed to get local user: %v", err)
 	}
 
 	return &RpcClient{

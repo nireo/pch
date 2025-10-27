@@ -7,13 +7,12 @@
 package pb
 
 import (
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
-
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
 )
 
 const (
@@ -148,6 +147,7 @@ func (x *RegisterRequest) GetOneTimePrekeys() []*SignedPrekey {
 type RegisterResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	AuthChallenge []byte                 `protobuf:"bytes,2,opt,name=auth_challenge,json=authChallenge,proto3" json:"auth_challenge,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -187,6 +187,13 @@ func (x *RegisterResponse) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *RegisterResponse) GetAuthChallenge() []byte {
+	if x != nil {
+		return x.AuthChallenge
+	}
+	return nil
 }
 
 type SignedPrekey struct {
@@ -809,6 +816,7 @@ func (x *OfflineMessage) GetFrom() string {
 type JoinRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Signature     []byte                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -848,6 +856,13 @@ func (x *JoinRequest) GetUsername() string {
 		return x.Username
 	}
 	return ""
+}
+
+func (x *JoinRequest) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
 }
 
 type JoinResponse struct {
@@ -1320,9 +1335,10 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\fidentity_key\x18\x02 \x01(\fR\videntityKey\x12#\n" +
 	"\rverifying_key\x18\x03 \x01(\fR\fverifyingKey\x126\n" +
 	"\rsigned_prekey\x18\x04 \x01(\v2\x11.pch.SignedPrekeyR\fsignedPrekey\x12;\n" +
-	"\x10one_time_prekeys\x18\x05 \x03(\v2\x11.pch.SignedPrekeyR\x0eoneTimePrekeys\",\n" +
+	"\x10one_time_prekeys\x18\x05 \x03(\v2\x11.pch.SignedPrekeyR\x0eoneTimePrekeys\"S\n" +
 	"\x10RegisterResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\x86\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12%\n" +
+	"\x0eauth_challenge\x18\x02 \x01(\fR\rauthChallenge\"\x86\x01\n" +
 	"\fSignedPrekey\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\fR\tpublicKey\x12\x1c\n" +
@@ -1361,9 +1377,10 @@ const file_pb_chat_proto_rawDesc = "" +
 	"\apayload\x18\x01 \x01(\fR\apayload\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12+\n" +
 	"\x04kind\x18\x03 \x01(\x0e2\x17.pch.OfflineMessageKindR\x04kind\x12\x12\n" +
-	"\x04from\x18\x04 \x01(\tR\x04from\")\n" +
+	"\x04from\x18\x04 \x01(\tR\x04from\"G\n" +
 	"\vJoinRequest\x12\x1a\n" +
-	"\busername\x18\x01 \x01(\tR\busername\"\x93\x01\n" +
+	"\busername\x18\x01 \x01(\tR\busername\x12\x1c\n" +
+	"\tsignature\x18\x02 \x01(\fR\tsignature\"\x93\x01\n" +
 	"\fJoinResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x128\n" +
 	"\ttimestamp\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12/\n" +
@@ -1426,34 +1443,31 @@ func file_pb_chat_proto_rawDescGZIP() []byte {
 	return file_pb_chat_proto_rawDescData
 }
 
-var (
-	file_pb_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-	file_pb_chat_proto_msgTypes  = make([]protoimpl.MessageInfo, 19)
-	file_pb_chat_proto_goTypes   = []any{
-		(OfflineMessageKind)(0),       // 0: pch.OfflineMessageKind
-		(*RegisterRequest)(nil),       // 1: pch.RegisterRequest
-		(*RegisterResponse)(nil),      // 2: pch.RegisterResponse
-		(*SignedPrekey)(nil),          // 3: pch.SignedPrekey
-		(*UploadOTPsRequest)(nil),     // 4: pch.UploadOTPsRequest
-		(*UploadOTPsResponse)(nil),    // 5: pch.UploadOTPsResponse
-		(*FetchBundleRequest)(nil),    // 6: pch.FetchBundleRequest
-		(*FetchBundleResponse)(nil),   // 7: pch.FetchBundleResponse
-		(*PrekeyBundle)(nil),          // 8: pch.PrekeyBundle
-		(*ClientMessage)(nil),         // 9: pch.ClientMessage
-		(*ServerMessage)(nil),         // 10: pch.ServerMessage
-		(*OfflineMessage)(nil),        // 11: pch.OfflineMessage
-		(*JoinRequest)(nil),           // 12: pch.JoinRequest
-		(*JoinResponse)(nil),          // 13: pch.JoinResponse
-		(*KeyExchangeMessage)(nil),    // 14: pch.KeyExchangeMessage
-		(*InitialMessage)(nil),        // 15: pch.InitialMessage
-		(*EncryptedMessage)(nil),      // 16: pch.EncryptedMessage
-		(*RatchetMessage)(nil),        // 17: pch.RatchetMessage
-		(*HeartbeatMessage)(nil),      // 18: pch.HeartbeatMessage
-		(*UserRecord)(nil),            // 19: pch.UserRecord
-		(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
-	}
-)
-
+var file_pb_chat_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_pb_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_pb_chat_proto_goTypes = []any{
+	(OfflineMessageKind)(0),       // 0: pch.OfflineMessageKind
+	(*RegisterRequest)(nil),       // 1: pch.RegisterRequest
+	(*RegisterResponse)(nil),      // 2: pch.RegisterResponse
+	(*SignedPrekey)(nil),          // 3: pch.SignedPrekey
+	(*UploadOTPsRequest)(nil),     // 4: pch.UploadOTPsRequest
+	(*UploadOTPsResponse)(nil),    // 5: pch.UploadOTPsResponse
+	(*FetchBundleRequest)(nil),    // 6: pch.FetchBundleRequest
+	(*FetchBundleResponse)(nil),   // 7: pch.FetchBundleResponse
+	(*PrekeyBundle)(nil),          // 8: pch.PrekeyBundle
+	(*ClientMessage)(nil),         // 9: pch.ClientMessage
+	(*ServerMessage)(nil),         // 10: pch.ServerMessage
+	(*OfflineMessage)(nil),        // 11: pch.OfflineMessage
+	(*JoinRequest)(nil),           // 12: pch.JoinRequest
+	(*JoinResponse)(nil),          // 13: pch.JoinResponse
+	(*KeyExchangeMessage)(nil),    // 14: pch.KeyExchangeMessage
+	(*InitialMessage)(nil),        // 15: pch.InitialMessage
+	(*EncryptedMessage)(nil),      // 16: pch.EncryptedMessage
+	(*RatchetMessage)(nil),        // 17: pch.RatchetMessage
+	(*HeartbeatMessage)(nil),      // 18: pch.HeartbeatMessage
+	(*UserRecord)(nil),            // 19: pch.UserRecord
+	(*timestamppb.Timestamp)(nil), // 20: google.protobuf.Timestamp
+}
 var file_pb_chat_proto_depIdxs = []int32{
 	3,  // 0: pch.RegisterRequest.signed_prekey:type_name -> pch.SignedPrekey
 	3,  // 1: pch.RegisterRequest.one_time_prekeys:type_name -> pch.SignedPrekey

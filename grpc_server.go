@@ -3,6 +3,7 @@ package pch
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,9 @@ type RpcServer struct {
 	store         *Storage
 	activeStreams map[string]pb.ChatService_MessageStreamServer // username -> stream
 	mu            sync.RWMutex
+
+	challMu    sync.RWMutex
+	challenges map[string][32]byte
 }
 
 func NewRpcServer(dbPath string) (*RpcServer, error) {
@@ -48,11 +52,24 @@ func (r *RpcServer) Register(
 		return nil, ErrInvalidPrekeySignature
 	}
 
+	// if the user already exists return an auth challenge to prove that they're the one that they
+	// claim to be. They will return an signed version of this in a join message
 	if r.store.UserExists(req.Username) {
-		return nil, fmt.Errorf(
-			"user already exists with username %s",
-			req.Username,
-		)
+		var authChallenge [32]byte
+		_, err := rand.Read(authChallenge[:])
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate auth challenge: %s", err)
+		}
+
+		res := &pb.RegisterResponse{
+			AuthChallenge: authChallenge[:],
+		}
+
+		r.challMu.Lock()
+		r.challenges[req.Username] = authChallenge
+		r.challMu.Unlock()
+
+		return res, nil
 	}
 
 	userRecord := &UserRecord{

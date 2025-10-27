@@ -58,16 +58,41 @@ func NewRpcClient(addr string, username string, localStorePath string) (*RpcClie
 		return nil, fmt.Errorf("error making client: %v", err)
 	}
 
-	user, err := NewX3DFUser(username)
+	localStore, err := NewLocalStore(localStorePath)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to create user: %v", err)
 	}
 
-	localStore, err := NewLocalStore(localStorePath)
-	if err != nil {
+	var user *X3DHUser
+
+	storedUser, err := localStore.GetX3DHState(username)
+	if err == nil {
+		user = storedUser
+	} else if err == ErrUserNotFound {
+		// the user is not found so we should generate it
+		newUser, err := NewX3DFUser(username)
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to create user: %v", err)
+		}
+
+		err = newUser.GeneratePrekeys(false)
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to generate prekeys, %v", err)
+		}
+
+		err = localStore.StoreX3DHState(newUser)
+		if err != nil {
+			conn.Close()
+			return nil, fmt.Errorf("failed to store user data: %v", err)
+		}
+		user = newUser
+	} else {
+		// real error something is wrong
 		conn.Close()
-		return nil, fmt.Errorf("failed to create user: %v", err)
+		return nil, fmt.Errorf("failed to get local user: %v", err)
 	}
 
 	return &RpcClient{
@@ -129,12 +154,7 @@ func (c *RpcClient) generateOtps(n int) ([]*pb.SignedPrekey, []*ecdh.PrivateKey,
 
 // Register registers the user with the server using the provided username. It generates prekeys and
 // one-time prekeys as part of the registration process.
-func (c *RpcClient) Register(ctx context.Context, username string) error {
-	err := c.user.GeneratePrekeys(false)
-	if err != nil {
-		return fmt.Errorf("failed to generate prekeys, %v", err)
-	}
-
+func (c *RpcClient) Register(ctx context.Context, username string) ([]byte, error) {
 	signedPrekey := &pb.SignedPrekey{
 		PublicKey: c.user.SignedPrekeyPublic.Bytes(),
 		Signature: ed25519.Sign(
@@ -146,7 +166,7 @@ func (c *RpcClient) Register(ctx context.Context, username string) error {
 
 	otps, err := c.generateAndStoreOtps(initialOtpCount)
 	if err != nil {
-		return fmt.Errorf("failed to generate otps: %v", err)
+		return nil, fmt.Errorf("failed to generate otps: %v", err)
 	}
 
 	req := &pb.RegisterRequest{
@@ -156,8 +176,13 @@ func (c *RpcClient) Register(ctx context.Context, username string) error {
 		SignedPrekey:   signedPrekey,
 		OneTimePrekeys: otps,
 	}
-	_, err = c.srv.Register(ctx, req)
-	return err
+
+	res, err := c.srv.Register(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return res.AuthChallenge, nil
 }
 
 // FetchBundle fetches the prekey bundle for the specified username from the server.
@@ -226,6 +251,7 @@ func (c *RpcClient) UploadOTPs(ctx context.Context, count int) error {
 func (c *RpcClient) StartChat(
 	ctx context.Context,
 	username string,
+	authChallenge []byte,
 ) (pb.ChatService_MessageStreamClient, error) {
 	c.streamMu.Lock()
 	defer c.streamMu.Unlock()
@@ -240,15 +266,19 @@ func (c *RpcClient) StartChat(
 
 	c.stream = stream
 
-	joinMsg := &pb.ClientMessage{
-		MessageType: &pb.ClientMessage_Join{
-			Join: &pb.JoinRequest{
-				Username: username,
-			},
-		},
+	jq := pb.JoinRequest{Username: username}
+
+	if len(authChallenge) > 0 {
+		sig := ed25519.Sign(c.user.SigningKey, authChallenge)
+		jq.Signature = sig
 	}
 
 	log.Printf("sending join message")
+	joinMsg := &pb.ClientMessage{
+		MessageType: &pb.ClientMessage_Join{
+			Join: &jq,
+		},
+	}
 
 	if err := stream.Send(joinMsg); err != nil {
 		return nil, fmt.Errorf("failed to send join message: %v", err)

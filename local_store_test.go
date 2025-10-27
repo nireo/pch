@@ -1,9 +1,11 @@
 package pch
 
 import (
+	"bytes"
 	"crypto/ecdh"
 	"crypto/rand"
 	"os"
+	"path"
 	"testing"
 	"time"
 )
@@ -240,5 +242,110 @@ func TestLocalStore_MessagesSortedByTimestamp(t *testing.T) {
 		if retrieved[i].Timestamp.Before(retrieved[i-1].Timestamp) {
 			t.Error("messages not sorted by timestamp")
 		}
+	}
+}
+
+func TestX3DHUserStorageWithoutPrekeys(t *testing.T) {
+	path := path.Join(t.TempDir(), "local.db")
+	store, err := NewLocalStore(path)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	eu, err := NewX3DFUser("test")
+	if err != nil {
+		t.Fatalf("cannot create user: %s", err)
+	}
+
+	err = store.StoreX3DHState(eu)
+	if err != nil {
+		t.Fatalf("error storing user: %s", err)
+	}
+
+	gu, err := store.GetX3DHState("test")
+	if err != nil {
+		t.Fatalf("error getting user user: %s", err)
+	}
+
+	if !bytes.Equal(eu.IdentityPrivateKey.Bytes(), gu.IdentityPrivateKey.Bytes()) {
+		t.Fatalf("keys don't match")
+	}
+	if !bytes.Equal(eu.IdentityPublicKey.Bytes(), gu.IdentityPublicKey.Bytes()) {
+		t.Fatalf("keys don't match")
+	}
+
+	if !bytes.Equal([]byte(eu.VerifyingKey), []byte(gu.VerifyingKey)) {
+		t.Fatalf("keys don't match")
+	}
+
+	if !bytes.Equal([]byte(eu.SigningKey), []byte(gu.SigningKey)) {
+		t.Fatalf("keys don't match")
+	}
+
+	if !eu.VerifyingKey.Equal(gu.VerifyingKey) {
+		t.Fatalf("keys don't match")
+	}
+	if !eu.SigningKey.Equal(gu.SigningKey) {
+		t.Fatalf("keys don't match")
+	}
+
+	if eu.Username != gu.Username {
+		t.Fatalf("error getting username: %s", err)
+	}
+}
+
+func TestX3DHUserStorageWithPrekeys(t *testing.T) {
+	path := path.Join(t.TempDir(), "local.db")
+	store, err := NewLocalStore(path)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	eu, err := NewX3DFUser("test")
+	if err != nil {
+		t.Fatalf("cannot create user: %s", err)
+	}
+
+	// we don't care about one-time prekeys here as they won't be persisted here
+	err = eu.GeneratePrekeys(false)
+	if err != nil {
+		t.Fatalf("error generating prekeys: %s", err)
+	}
+
+	err = store.StoreX3DHState(eu)
+	if err != nil {
+		t.Fatalf("error storing user: %s", err)
+	}
+
+	gu, err := store.GetX3DHState("test")
+	if err != nil {
+		t.Fatalf("error getting user user: %s", err)
+	}
+
+	if !bytes.Equal(eu.IdentityPrivateKey.Bytes(), gu.IdentityPrivateKey.Bytes()) {
+		t.Fatalf("keys don't match")
+	}
+	if !bytes.Equal(eu.IdentityPublicKey.Bytes(), gu.IdentityPublicKey.Bytes()) {
+		t.Fatalf("keys don't match")
+	}
+
+	if !bytes.Equal(eu.SignedPrekeyPrivate.Bytes(), gu.SignedPrekeyPrivate.Bytes()) {
+		t.Fatalf("keys don't match")
+	}
+	if !bytes.Equal(eu.SignedPrekeyPublic.Bytes(), gu.SignedPrekeyPublic.Bytes()) {
+		t.Fatalf("keys don't match")
+	}
+
+	if !bytes.Equal(eu.VerifyingKey, gu.VerifyingKey) {
+		t.Fatalf("keys don't match")
+	}
+	if !bytes.Equal(eu.SigningKey, gu.SigningKey) {
+		t.Fatalf("keys don't match")
+	}
+
+	if eu.Username != gu.Username {
+		t.Fatalf("error getting username: %s", err)
 	}
 }

@@ -198,14 +198,20 @@ func (l *LocalStore) StoreX3DHState(state *X3DHUser) error {
 			return err
 		}
 
+		if state.IdentityPrivateKey == nil {
+			return ErrMissingKeys
+		}
+
 		err = uBucket.Put(identityKey, state.IdentityPrivateKey.Bytes())
 		if err != nil {
 			return err
 		}
 
-		err = uBucket.Put(signedPreKey, state.SignedPrekeyPrivate.Bytes())
-		if err != nil {
-			return err
+		if state.SignedPrekeyPrivate != nil {
+			err = uBucket.Put(signedPreKey, state.SignedPrekeyPrivate.Bytes())
+			if err != nil {
+				return err
+			}
 		}
 
 		err = uBucket.Put(signingKey, state.SigningKey)
@@ -247,29 +253,31 @@ func (l *LocalStore) GetX3DHState(username string) (*X3DHUser, error) {
 		state.IdentityPublicKey = state.IdentityPrivateKey.PublicKey()
 
 		v = uBucket.Get(signedPreKey)
-		if v == nil {
-			return ErrMissingKeys
+		if v != nil {
+			state.SignedPrekeyPrivate, err = ecdh.X25519().NewPrivateKey(v)
+			if err != nil {
+				return err
+			}
+			state.SignedPrekeyPublic = state.SignedPrekeyPrivate.PublicKey()
 		}
-		state.SignedPrekeyPrivate, err = ecdh.X25519().NewPrivateKey(v)
-		if err != nil {
-			return err
-		}
-		state.SignedPrekeyPublic = state.SignedPrekeyPrivate.PublicKey()
 
 		v = uBucket.Get(signingKey)
 		if v == nil {
 			return ErrMissingKeys
 		}
-		copy(state.SigningKey, v)
+		state.SigningKey = append([]byte(nil), v...)
 
 		v = uBucket.Get(verifyingKey)
 		if v == nil {
 			return ErrMissingKeys
 		}
-		copy(state.VerifyingKey, v)
+		state.VerifyingKey = append([]byte(nil), v...)
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	state.Username = username
-	return nil, err
+	return state, nil
 }

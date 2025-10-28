@@ -189,6 +189,14 @@ func (r *RpcServer) MessageStream(
 
 		switch v := msg.MessageType.(type) {
 		case *pb.ClientMessage_Join:
+			// try to find the challenge
+			r.challMu.RLock()
+			if chall, ok := r.challenges[v.Join.Username]; ok {
+			} else {
+			}
+
+			r.challMu.RUnlock()
+
 			username = v.Join.Username
 
 			r.mu.Lock()

@@ -68,14 +68,15 @@ func main() {
 	regctx := context.Background()
 
 	fmt.Print("registering user... ")
-	if err := client.Register(regctx, *username); err != nil {
+	if _, err := client.Register(regctx, *username); err != nil {
 		fmt.Printf("(already registered or error: %v)\n", err)
 	} else {
 		fmt.Println("success")
 	}
+	// TODO: proper handling of auth challenge
 
 	fmt.Print("connecting to chat server... ")
-	if _, err := client.StartChat(context.Background(), *username); err != nil {
+	if _, err := client.StartChat(context.Background(), *username, nil); err != nil {
 		log.Fatalf("failed to start chat: %v", err)
 	}
 	fmt.Println("connected")

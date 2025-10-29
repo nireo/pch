@@ -29,8 +29,9 @@ type RpcServer struct {
 	activeStreams map[string]pb.ChatService_MessageStreamServer // username -> stream
 	mu            sync.RWMutex
 
-	challMu    sync.RWMutex
-	challenges map[string]challengeEntry
+	stopChallCleanup chan struct{}
+	challMu          sync.RWMutex
+	challenges       map[string]challengeEntry
 }
 
 func NewRpcServer(dbPath string) (*RpcServer, error) {
@@ -39,11 +40,15 @@ func NewRpcServer(dbPath string) (*RpcServer, error) {
 		return nil, err
 	}
 
-	return &RpcServer{
-		store:         storage,
-		activeStreams: make(map[string]pb.ChatService_MessageStreamServer),
-		challenges:    make(map[string]challengeEntry),
-	}, nil
+	r := &RpcServer{
+		store:            storage,
+		activeStreams:    make(map[string]pb.ChatService_MessageStreamServer),
+		challenges:       make(map[string]challengeEntry),
+		stopChallCleanup: make(chan struct{}),
+	}
+
+	go r.cleanupAuthChallenges()
+	return r, nil
 }
 
 func getAuthChallenge() ([32]byte, error) {
@@ -53,6 +58,26 @@ func getAuthChallenge() ([32]byte, error) {
 		return [32]byte{}, fmt.Errorf("failed to generate auth challenge: %s", err)
 	}
 	return authChallenge, nil
+}
+
+func (r *RpcServer) cleanupAuthChallenges() {
+	t := time.NewTicker(1 * time.Minute)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-r.stopChallCleanup:
+			return
+		case t := <-t.C:
+			r.challMu.Lock()
+			for u, chall := range r.challenges {
+				if chall.expiresAt.Before(t) {
+					delete(r.challenges, u)
+				}
+			}
+			r.challMu.Unlock()
+		}
+	}
 }
 
 func (r *RpcServer) Register(
@@ -171,6 +196,7 @@ func (r *RpcServer) UploadOPTs(
 }
 
 func (r *RpcServer) Close() error {
+	r.stopChallCleanup <- struct{}{}
 	return r.store.Close()
 }
 

@@ -60,19 +60,21 @@ func TestMessageSendReceive(t *testing.T) {
 	}
 	defer bob.Close()
 
-	if _, err := alice.Register(ctx, "alice"); err != nil {
+	aliceChallenge, err := alice.Register(ctx, "alice")
+	if err != nil {
 		t.Fatalf("Failed to register alice: %v", err)
 	}
 
-	if _, err := bob.Register(ctx, "bob"); err != nil {
+	bobChallenge, err := bob.Register(ctx, "bob")
+	if err != nil {
 		t.Fatalf("Failed to register bob: %v", err)
 	}
 
-	if _, err := alice.StartChat(ctx, "alice", nil); err != nil {
+	if _, err := alice.StartChat(ctx, "alice", aliceChallenge); err != nil {
 		t.Fatalf("Failed to start alice's stream: %v", err)
 	}
 
-	if _, err := bob.StartChat(ctx, "bob", nil); err != nil {
+	if _, err := bob.StartChat(ctx, "bob", bobChallenge); err != nil {
 		t.Fatalf("Failed to start bob's stream: %v", err)
 	}
 
@@ -242,10 +244,10 @@ func TestMultipleMessages(t *testing.T) {
 	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
 	defer bob.Close()
 
-	alice.Register(ctx, "alice")
-	bob.Register(ctx, "bob")
-	alice.StartChat(ctx, "alice", nil)
-	bob.StartChat(ctx, "bob", nil)
+	aliceChallenge, _ := alice.Register(ctx, "alice")
+	bobChallenge, _ := bob.Register(ctx, "bob")
+	alice.StartChat(ctx, "alice", aliceChallenge)
+	bob.StartChat(ctx, "bob", bobChallenge)
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -319,8 +321,8 @@ func TestMessageWithoutKeyExchange(t *testing.T) {
 	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
 	defer alice.Close()
 
-	alice.Register(ctx, "alice")
-	alice.StartChat(ctx, "alice", nil)
+	aliceChallenge, _ := alice.Register(ctx, "alice")
+	alice.StartChat(ctx, "alice", aliceChallenge)
 
 	err = alice.SendMessage("bob", "This should fail")
 	if err == nil {
@@ -364,10 +366,10 @@ func TestOfflineMessageDelivery(t *testing.T) {
 	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
 	defer bob.Close()
 
-	alice.Register(ctx, "alice")
-	bob.Register(ctx, "bob")
+	aliceChallenge, _ := alice.Register(ctx, "alice")
+	bobChallenge, _ := bob.Register(ctx, "bob")
 
-	alice.StartChat(ctx, "alice", nil)
+	alice.StartChat(ctx, "alice", aliceChallenge)
 	time.Sleep(100 * time.Millisecond)
 
 	alice.InitiateChat(ctx, "bob")
@@ -391,7 +393,7 @@ func TestOfflineMessageDelivery(t *testing.T) {
 		}
 	}
 
-	bob.StartChat(ctx, "bob", nil)
+	bob.StartChat(ctx, "bob", bobChallenge)
 
 	done := make(chan struct{})
 	go func() {
@@ -440,10 +442,10 @@ func TestOfflineKeyExchange(t *testing.T) {
 	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
 	defer bob.Close()
 
-	alice.Register(ctx, "alice")
-	bob.Register(ctx, "bob")
+	aliceChallenge, _ := alice.Register(ctx, "alice")
+	bobChallenge, _ := bob.Register(ctx, "bob")
 
-	alice.StartChat(ctx, "alice", nil)
+	alice.StartChat(ctx, "alice", aliceChallenge)
 	time.Sleep(100 * time.Millisecond)
 
 	if err := alice.InitiateChat(ctx, "bob"); err != nil {
@@ -452,7 +454,7 @@ func TestOfflineKeyExchange(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	bob.StartChat(ctx, "bob", nil)
+	bob.StartChat(ctx, "bob", bobChallenge)
 	time.Sleep(1 * time.Second)
 
 	if !bob.HasConversation("alice") {
@@ -522,9 +524,9 @@ func TestMultipleOfflineMessages(t *testing.T) {
 	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
 	defer bob.Close()
 
-	alice.Register(ctx, "alice")
-	bob.Register(ctx, "bob")
-	alice.StartChat(ctx, "alice", nil)
+	aliceChallenge, _ := alice.Register(ctx, "alice")
+	bobChallenge, _ := bob.Register(ctx, "bob")
+	alice.StartChat(ctx, "alice", aliceChallenge)
 	time.Sleep(100 * time.Millisecond)
 
 	alice.InitiateChat(ctx, "bob")
@@ -559,7 +561,7 @@ func TestMultipleOfflineMessages(t *testing.T) {
 		}
 	}
 
-	bob.StartChat(ctx, "bob", nil)
+	bob.StartChat(ctx, "bob", bobChallenge)
 
 	done := make(chan struct{})
 	go func() {

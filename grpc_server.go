@@ -18,6 +18,11 @@ import (
 
 var ErrInvalidPrekeySignature = errors.New("invalid prekey signature")
 
+type challengeEntry struct {
+	challenge [32]byte
+	expiresAt time.Time
+}
+
 type RpcServer struct {
 	pb.UnimplementedChatServiceServer
 	store         *Storage
@@ -25,7 +30,7 @@ type RpcServer struct {
 	mu            sync.RWMutex
 
 	challMu    sync.RWMutex
-	challenges map[string][32]byte
+	challenges map[string]challengeEntry
 }
 
 func NewRpcServer(dbPath string) (*RpcServer, error) {
@@ -37,7 +42,17 @@ func NewRpcServer(dbPath string) (*RpcServer, error) {
 	return &RpcServer{
 		store:         storage,
 		activeStreams: make(map[string]pb.ChatService_MessageStreamServer),
+		challenges:    make(map[string]challengeEntry),
 	}, nil
+}
+
+func getAuthChallenge() ([32]byte, error) {
+	var authChallenge [32]byte
+	_, err := rand.Read(authChallenge[:])
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("failed to generate auth challenge: %s", err)
+	}
+	return authChallenge, nil
 }
 
 func (r *RpcServer) Register(
@@ -54,34 +69,19 @@ func (r *RpcServer) Register(
 
 	// if the user already exists return an auth challenge to prove that they're the one that they
 	// claim to be. They will return an signed version of this in a join message
-	if r.store.UserExists(req.Username) {
-		var authChallenge [32]byte
-		_, err := rand.Read(authChallenge[:])
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate auth challenge: %s", err)
+	// TODO: create if not exists
+	if !r.store.UserExists(req.Username) {
+		userRecord := &UserRecord{
+			Username:     req.Username,
+			IdentityKey:  req.IdentityKey,
+			VerifyingKey: req.VerifyingKey,
+			SignedPrekey: req.SignedPrekey,
+			CreatedAt:    time.Now(),
 		}
 
-		res := &pb.RegisterResponse{
-			AuthChallenge: authChallenge[:],
+		if err := r.store.StoreUser(userRecord); err != nil {
+			return nil, fmt.Errorf("failed to store user %v", err)
 		}
-
-		r.challMu.Lock()
-		r.challenges[req.Username] = authChallenge
-		r.challMu.Unlock()
-
-		return res, nil
-	}
-
-	userRecord := &UserRecord{
-		Username:     req.Username,
-		IdentityKey:  req.IdentityKey,
-		VerifyingKey: req.VerifyingKey,
-		SignedPrekey: req.SignedPrekey,
-		CreatedAt:    time.Now(),
-	}
-
-	if err := r.store.StoreUser(userRecord); err != nil {
-		return nil, fmt.Errorf("failed to store user %v", err)
 	}
 
 	if len(req.OneTimePrekeys) > 0 {
@@ -91,7 +91,24 @@ func (r *RpcServer) Register(
 		}
 	}
 
-	return &pb.RegisterResponse{}, nil
+	var authChallenge [32]byte
+	_, err := rand.Read(authChallenge[:])
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate auth challenge: %s", err)
+	}
+
+	res := &pb.RegisterResponse{
+		AuthChallenge: authChallenge[:],
+	}
+
+	r.challMu.Lock()
+	r.challenges[req.Username] = challengeEntry{
+		challenge: authChallenge,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
+	r.challMu.Unlock()
+
+	return res, nil
 }
 
 func (r *RpcServer) FetchBundle(
@@ -191,11 +208,26 @@ func (r *RpcServer) MessageStream(
 		case *pb.ClientMessage_Join:
 			// try to find the challenge
 			r.challMu.RLock()
-			if chall, ok := r.challenges[v.Join.Username]; ok {
-			} else {
+			chall, ok := r.challenges[v.Join.Username]
+			if !ok {
+				r.challMu.Unlock()
+				return fmt.Errorf("no auth challenge found for user")
+			}
+			delete(r.challenges, v.Join.Username)
+			r.challMu.RUnlock()
+
+			if chall.expiresAt.Before(time.Now()) {
+				return fmt.Errorf("auth challenge expired try registering again")
 			}
 
-			r.challMu.RUnlock()
+			userRecord, err := r.store.GetUser(v.Join.Username)
+			if err != nil {
+				return fmt.Errorf("user not found: %v", err)
+			}
+
+			if !ed25519.Verify(userRecord.VerifyingKey, chall.challenge[:], v.Join.Signature) {
+				return fmt.Errorf("invalid challenge signature")
+			}
 
 			username = v.Join.Username
 

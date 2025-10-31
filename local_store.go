@@ -187,6 +187,45 @@ func (l *LocalStore) GetMessages(chatPerson string) ([]LocalMessage, error) {
 	return messages, err
 }
 
+// GetAllMessages returns a list of all messages that the user has along with the username that has
+// them with. the returned map has username -> all messages
+func (l *LocalStore) GetAllMessages() (map[string][]LocalMessage, error) {
+	res := make(map[string][]LocalMessage)
+
+	err := l.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket(localChatBucket)
+
+		err := b.ForEachBucket(func(k []byte) error {
+			var messages []LocalMessage
+			chatB := b.Bucket(k)
+			if chatB == nil {
+				return nil // shouldn't be possible
+			}
+
+			err := chatB.ForEach(func(k, v []byte) error {
+				var msg LocalMessage
+				err := decodeGob(v, &msg)
+				if err != nil {
+					return err
+				}
+				messages = append(messages, msg)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			res[string(k)] = messages
+			return nil
+		})
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
 // StoreX3DHState stores the private keys for the X3DH state such that it's persisted between
 // sessions. It stores only the private keys since the public keys can easily be derived from those.
 func (l *LocalStore) StoreX3DHState(state *X3DHUser) error {

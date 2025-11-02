@@ -22,8 +22,8 @@ import (
 
 const initialOtpCount = 50
 
-// RpcClient is a gRPC client for the ChatService. It also takes care of handling encryption etc
-type RpcClient struct {
+// RPCClient is a gRPC client for the ChatService. It also takes care of handling encryption etc
+type RPCClient struct {
 	conn          *grpc.ClientConn
 	srv           pb.ChatServiceClient
 	user          *X3DHUser
@@ -42,7 +42,7 @@ type RpcClient struct {
 }
 
 // NewRpcClient creates a new gRPC client connected to the specified address.
-func NewRpcClient(addr string, username string, localStorePath string) (*RpcClient, error) {
+func NewRpcClient(addr string, username string, localStorePath string) (*RPCClient, error) {
 	kacp := keepalive.ClientParameters{
 		Time:                15 * time.Second,
 		Timeout:             5 * time.Second,
@@ -71,31 +71,30 @@ func NewRpcClient(addr string, username string, localStorePath string) (*RpcClie
 		user = storedUser
 	} else if err == ErrUserNotFound {
 		// the user is not found so we should generate it
-		newUser, err := NewX3DFUser(username)
+		user, err = NewX3DFUser(username)
 		if err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to create user: %v", err)
 		}
 
-		err = newUser.GeneratePrekeys(false)
+		err = user.GeneratePrekeys(false)
 		if err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to generate prekeys, %v", err)
 		}
 
-		err = localStore.StoreX3DHState(newUser)
+		err = localStore.StoreX3DHState(user)
 		if err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("failed to store user data: %v", err)
 		}
-		user = newUser
 	} else {
 		// real error something is wrong
 		conn.Close()
 		return nil, fmt.Errorf("failed to get local user: %v", err)
 	}
 
-	return &RpcClient{
+	return &RPCClient{
 		localStore:    localStore,
 		conn:          conn,
 		srv:           pb.NewChatServiceClient(conn),
@@ -106,17 +105,8 @@ func NewRpcClient(addr string, username string, localStorePath string) (*RpcClie
 	}, nil
 }
 
-func (c *RpcClient) storeOTP(publicKey []byte, privKey *ecdh.PrivateKey) {
-	var key [32]byte
-	copy(key[:], publicKey)
-
-	c.otpMu.Lock()
-	c.otpPrivKeys[key] = privKey
-	c.otpMu.Unlock()
-}
-
 // Close closes the gRPC client connection.
-func (c *RpcClient) Close() error {
+func (c *RPCClient) Close() error {
 	c.streamMu.Lock()
 	if c.stream != nil {
 		c.stream.CloseSend()
@@ -126,12 +116,12 @@ func (c *RpcClient) Close() error {
 }
 
 // generateOtps generates n one-time prekeys.
-func (c *RpcClient) generateOtps(n int) ([]*pb.SignedPrekey, []*ecdh.PrivateKey, error) {
+func (c *RPCClient) generateOtps(n int) ([]*pb.SignedPrekey, []*ecdh.PrivateKey, error) {
 	otps := make([]*pb.SignedPrekey, n)
 	privKeys := make([]*ecdh.PrivateKey, n)
 	curve := ecdh.X25519()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		otpPriv, err := curve.GenerateKey(rand.Reader)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate otp: %w", err)
@@ -154,7 +144,7 @@ func (c *RpcClient) generateOtps(n int) ([]*pb.SignedPrekey, []*ecdh.PrivateKey,
 
 // Register registers the user with the server using the provided username. It generates prekeys and
 // one-time prekeys as part of the registration process.
-func (c *RpcClient) Register(ctx context.Context, username string) ([]byte, error) {
+func (c *RPCClient) Register(ctx context.Context, username string) ([]byte, error) {
 	signedPrekey := &pb.SignedPrekey{
 		PublicKey: c.user.SignedPrekeyPublic.Bytes(),
 		Signature: ed25519.Sign(
@@ -186,7 +176,7 @@ func (c *RpcClient) Register(ctx context.Context, username string) ([]byte, erro
 }
 
 // FetchBundle fetches the prekey bundle for the specified username from the server.
-func (c *RpcClient) FetchBundle(ctx context.Context, username string) (*pb.PrekeyBundle, error) {
+func (c *RPCClient) FetchBundle(ctx context.Context, username string) (*pb.PrekeyBundle, error) {
 	req := &pb.FetchBundleRequest{
 		Username: username,
 	}
@@ -199,7 +189,7 @@ func (c *RpcClient) FetchBundle(ctx context.Context, username string) (*pb.Preke
 	return resp.Bundle, nil
 }
 
-func (c *RpcClient) generateAndStoreOtps(count int) ([]*pb.SignedPrekey, error) {
+func (c *RPCClient) generateAndStoreOtps(count int) ([]*pb.SignedPrekey, error) {
 	otps, privKeys, err := c.generateOtps(count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate otps: %v", err)
@@ -227,7 +217,7 @@ func (c *RpcClient) generateAndStoreOtps(count int) ([]*pb.SignedPrekey, error) 
 }
 
 // UploadOTPs uploads one-time prekeys to the server.
-func (c *RpcClient) UploadOTPs(ctx context.Context, count int) error {
+func (c *RPCClient) UploadOTPs(ctx context.Context, count int) error {
 	otps, err := c.generateAndStoreOtps(count)
 	if err != nil {
 		return err
@@ -248,7 +238,7 @@ func (c *RpcClient) UploadOTPs(ctx context.Context, count int) error {
 }
 
 // StartChat initiates the message stream and joins the chat.
-func (c *RpcClient) StartChat(
+func (c *RPCClient) StartChat(
 	ctx context.Context,
 	username string,
 	authChallenge []byte,
@@ -290,7 +280,7 @@ func (c *RpcClient) StartChat(
 }
 
 // receiveMessages handles incoming messages from the stream.
-func (c *RpcClient) receiveMessages(stream pb.ChatService_MessageStreamClient) {
+func (c *RPCClient) receiveMessages(stream pb.ChatService_MessageStreamClient) {
 	for {
 		msg, err := stream.Recv()
 		if err == io.EOF {
@@ -307,7 +297,7 @@ func (c *RpcClient) receiveMessages(stream pb.ChatService_MessageStreamClient) {
 	}
 }
 
-func (c *RpcClient) handleOfflineMessages(messages []*pb.OfflineMessage) {
+func (c *RPCClient) handleOfflineMessages(messages []*pb.OfflineMessage) {
 	if len(messages) == 0 {
 		return
 	}
@@ -342,7 +332,7 @@ func (c *RpcClient) handleOfflineMessages(messages []*pb.OfflineMessage) {
 }
 
 // handleServerMessage processes incoming server messages.
-func (c *RpcClient) handleServerMessage(msg *pb.ServerMessage) {
+func (c *RPCClient) handleServerMessage(msg *pb.ServerMessage) {
 	switch v := msg.MessageType.(type) {
 	case *pb.ServerMessage_JoinResponse:
 		c.handleOfflineMessages(v.JoinResponse.Messages)
@@ -364,7 +354,7 @@ func (c *RpcClient) handleServerMessage(msg *pb.ServerMessage) {
 }
 
 // handleEncryptedMessage processes incoming encrypted messages.
-func (c *RpcClient) handleEncryptedMessage(msg *pb.EncryptedMessage) {
+func (c *RPCClient) handleEncryptedMessage(msg *pb.EncryptedMessage) {
 	c.mu.RLock()
 	conv, ok := c.conversations[msg.SenderId]
 	c.mu.RUnlock()
@@ -429,7 +419,7 @@ func (c *RpcClient) handleEncryptedMessage(msg *pb.EncryptedMessage) {
 }
 
 // SendMessage sends an encrypted message to the specified recipient.
-func (c *RpcClient) SendMessage(recipientID, text string) error {
+func (c *RPCClient) SendMessage(recipientID, text string) error {
 	c.mu.RLock()
 	conv, ok := c.conversations[recipientID]
 	c.mu.RUnlock()
@@ -492,7 +482,7 @@ func (c *RpcClient) SendMessage(recipientID, text string) error {
 	return nil
 }
 
-func (c *RpcClient) InitiateChat(ctx context.Context, recipientID string) error {
+func (c *RPCClient) InitiateChat(ctx context.Context, recipientID string) error {
 	bundle, err := c.FetchBundle(ctx, recipientID)
 	if err != nil {
 		return fmt.Errorf("failed to fetch bundle: %v", err)
@@ -591,7 +581,7 @@ func (c *RpcClient) InitiateChat(ctx context.Context, recipientID string) error 
 	return nil
 }
 
-func (c *RpcClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
+func (c *RPCClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
 	if msg.InitialMessage == nil {
 		log.Printf("Key exchange message missing initial message")
 		return
@@ -688,7 +678,7 @@ func (c *RpcClient) handleKeyExchange(msg *pb.KeyExchangeMessage) {
 }
 
 // SendHeartbeat sends a heartbeat message to keep the connection alive.
-func (c *RpcClient) SendHeartbeat() error {
+func (c *RPCClient) SendHeartbeat() error {
 	c.streamMu.Lock()
 	stream := c.stream
 	c.streamMu.Unlock()
@@ -709,7 +699,7 @@ func (c *RpcClient) SendHeartbeat() error {
 }
 
 // HasConversation checks if a conversation exists with the specified user.
-func (c *RpcClient) HasConversation(recipientID string) bool {
+func (c *RPCClient) HasConversation(recipientID string) bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	_, ok := c.conversations[recipientID]
@@ -717,7 +707,7 @@ func (c *RpcClient) HasConversation(recipientID string) bool {
 }
 
 // ListConversations returns a list of all active conversation IDs.
-func (c *RpcClient) ListConversations() []string {
+func (c *RPCClient) ListConversations() []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

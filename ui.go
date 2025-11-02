@@ -15,7 +15,7 @@ import (
 // ChatUI represents all of the components in the terminal interface
 type ChatUI struct {
 	app              *tview.Application
-	client           *RpcClient
+	client           *RPCClient
 	pages            *tview.Pages
 	conversationList *tview.List
 	messageView      *tview.TextView
@@ -30,7 +30,7 @@ type ChatUI struct {
 }
 
 // NewChatUI creates and initializes a new ChatUI instance
-func NewChatUI(client *RpcClient, username string) (*ChatUI, error) {
+func NewChatUI(client *RPCClient, username string) (*ChatUI, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	ui := &ChatUI{
@@ -297,17 +297,6 @@ func (ui *ChatUI) addConversation(username string) {
 		return
 	}
 	ui.conversationList.AddItem(username, "", 0, nil)
-}
-
-// removeConversation removes a conversation from the list
-func (ui *ChatUI) removeConversation(username string) {
-	idxs := ui.conversationList.FindItems(username, "", false, false)
-	if len(idxs) == 0 {
-		return
-	}
-	for _, idx := range idxs {
-		ui.conversationList.RemoveItem(idx)
-	}
 }
 
 // listenForMessages handles incoming messages

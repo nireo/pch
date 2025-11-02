@@ -139,8 +139,7 @@ func (r *RpcServer) Register(
 		}
 	}
 
-	var authChallenge [32]byte
-	_, err := rand.Read(authChallenge[:])
+	authChallenge, err := getAuthChallenge()
 	if err != nil {
 		r.logger.Err(err).Msg("failed to generate auth challenge") // this shouldn't really happen
 		return nil, fmt.Errorf("failed to generate auth challenge: %s", err)
@@ -399,7 +398,7 @@ func (r *RpcServer) handleJoinMessage(jreq *pb.JoinRequest, ctx *streamContext) 
 	return nil
 }
 
-func (r *RpcServer) handleHeartbeatMessage(msg *pb.HeartbeatMessage, ctx *streamContext) error {
+func (r *RpcServer) handleHeartbeatMessage(ctx *streamContext) error {
 	if err := ctx.stream.Send(&pb.ServerMessage{
 		MessageType: &pb.ServerMessage_Heartbeat{
 			Heartbeat: &pb.HeartbeatMessage{
@@ -486,7 +485,7 @@ func (r *RpcServer) handleMessage(msg *pb.ClientMessage, ctx *streamContext) err
 	case *pb.ClientMessage_EncryptedMessage:
 		return r.handleEncryptedMessage(v.EncryptedMessage, ctx)
 	case *pb.ClientMessage_Heartbeat:
-		return r.handleHeartbeatMessage(v.Heartbeat, ctx)
+		return r.handleHeartbeatMessage(ctx)
 	case *pb.ClientMessage_KeyExchange:
 		return r.handleKeyExchange(v.KeyExchange, ctx)
 	default:

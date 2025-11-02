@@ -13,7 +13,6 @@ import (
 
 var (
 	userBucket      = []byte("users")
-	convPrefix      = []byte("con")
 	otpBucket       = []byte("otps")
 	offlineMessages = []byte("offline")
 )
@@ -61,7 +60,7 @@ func decodeGob[T any](data []byte, entry *T) error {
 }
 
 func NewStorage(dbPath string) (*Storage, error) {
-	db, err := bolt.Open(dbPath, 0600, nil)
+	db, err := bolt.Open(dbPath, 0o600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -73,30 +72,6 @@ func NewStorage(dbPath string) (*Storage, error) {
 	}
 
 	return s, nil
-}
-
-func (s *Storage) newUser(username string, publicKey []byte) error {
-	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(userBucket)
-		err := b.Put([]byte(username), publicKey)
-		return err
-	})
-}
-
-func (s *Storage) getUserKey(username string) ([]byte, error) {
-	var key []byte
-	err := s.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket(userBucket)
-		v := b.Get([]byte(username))
-
-		if v != nil {
-			copy(key, v)
-		}
-
-		return fmt.Errorf("key not found for user %s", username)
-	})
-
-	return key, err
 }
 
 func (s *Storage) ensureBuckets() error {

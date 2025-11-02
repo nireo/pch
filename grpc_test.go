@@ -48,13 +48,13 @@ func TestMessageSendReceive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	alice, err := createTestClient(t, ctx, bufDialer, "alice")
+	alice, err := createTestClient(t, bufDialer, "alice")
 	if err != nil {
 		t.Fatalf("Failed to create alice: %v", err)
 	}
 	defer alice.Close()
 
-	bob, err := createTestClient(t, ctx, bufDialer, "bob")
+	bob, err := createTestClient(t, bufDialer, "bob")
 	if err != nil {
 		t.Fatalf("Failed to create bob: %v", err)
 	}
@@ -151,10 +151,9 @@ func TestMessageSendReceive(t *testing.T) {
 
 func createTestClient(
 	t *testing.T,
-	ctx context.Context,
 	dialer func(context.Context, string) (net.Conn, error),
 	username string,
-) (*RpcClient, error) {
+) (*RPCClient, error) {
 	conn, err := grpc.NewClient("passthrough:///bufnet",
 		grpc.WithContextDialer(dialer),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -201,7 +200,7 @@ func createTestClient(
 		return nil, fmt.Errorf("failed to get local user: %v", err)
 	}
 
-	return &RpcClient{
+	return &RPCClient{
 		conn:          conn,
 		srv:           pb.NewChatServiceClient(conn),
 		user:          user,
@@ -239,9 +238,9 @@ func TestMultipleMessages(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, bufDialer, "alice")
 	defer alice.Close()
-	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	bob, _ := createTestClient(t, bufDialer, "bob")
 	defer bob.Close()
 
 	aliceChallenge, _ := alice.Register(ctx, "alice")
@@ -318,7 +317,7 @@ func TestMessageWithoutKeyExchange(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, bufDialer, "alice")
 	defer alice.Close()
 
 	aliceChallenge, _ := alice.Register(ctx, "alice")
@@ -361,9 +360,9 @@ func TestOfflineMessageDelivery(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, bufDialer, "alice")
 	defer alice.Close()
-	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	bob, _ := createTestClient(t, bufDialer, "bob")
 	defer bob.Close()
 
 	aliceChallenge, _ := alice.Register(ctx, "alice")
@@ -437,9 +436,9 @@ func TestOfflineKeyExchange(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, bufDialer, "alice")
 	defer alice.Close()
-	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	bob, _ := createTestClient(t, bufDialer, "bob")
 	defer bob.Close()
 
 	aliceChallenge, _ := alice.Register(ctx, "alice")
@@ -519,9 +518,9 @@ func TestMultipleOfflineMessages(t *testing.T) {
 
 	ctx := context.Background()
 
-	alice, _ := createTestClient(t, ctx, bufDialer, "alice")
+	alice, _ := createTestClient(t, bufDialer, "alice")
 	defer alice.Close()
-	bob, _ := createTestClient(t, ctx, bufDialer, "bob")
+	bob, _ := createTestClient(t, bufDialer, "bob")
 	defer bob.Close()
 
 	aliceChallenge, _ := alice.Register(ctx, "alice")

@@ -2,10 +2,7 @@ package pch
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/gob"
-	"io"
-	"net"
 
 	pb "github.com/nireo/pch/pb"
 )
@@ -79,23 +76,4 @@ func DeserializeMessage(data []byte) (*Message, error) {
 	}
 
 	return &msg, nil
-}
-
-func sendData(conn net.Conn, data []byte) error {
-	length := uint32(len(data))
-	buf := make([]byte, 4+len(data))
-	binary.BigEndian.PutUint32(buf[0:4], length)
-	copy(buf[4:], data)
-
-	_, err := conn.Write(buf)
-	return err
-}
-
-func receiveData(conn net.Conn) ([]byte, error) {
-	var length uint32
-	binary.Read(conn, binary.BigEndian, &length)
-
-	msg := make([]byte, length)
-	_, err := io.ReadFull(conn, msg)
-	return msg, err
 }

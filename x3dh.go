@@ -240,7 +240,7 @@ func (u *X3DHUser) calculateSharedSecret(other PrekeyBundle) ([]byte, error) {
 	return sharedSecret, nil
 }
 
-// additionalInformation constructs a byte slice with the user's private
+// additionalInformation constructs a byte slice with the user's public
 // identity key the other public key and the user's username.
 func (u *X3DHUser) additionalInformation(other *ecdh.PublicKey) []byte {
 	ad := append(u.IdentityPublicKey.Bytes(), other.Bytes()...)

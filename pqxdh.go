@@ -235,7 +235,38 @@ func pqxdhKDF(km []byte, info string) ([]byte, error) {
 	return hkdfKey, nil
 }
 
-func verifyBundleSignatures() error {
+// verifyBundleSignatures verifies that the
+func (b *pqxdhBundle) verifyBundleSignatures() error {
+	if b == nil {
+		return errors.New("nil bundle")
+	}
+	if b.signingPub == nil || len(b.signingPub) != ed25519.PublicKeySize {
+		return errors.New("missing or bad signingPub")
+	}
+
+	if b.spkpk == nil || len(b.spkSig) != ed25519.SignatureSize {
+		return errors.New("missing signed-prekey or signature")
+	}
+	if !ed25519.Verify(b.signingPub, b.spkpk.Bytes(), b.spkSig) {
+		return errors.New("invalid signature on signed-prekey")
+	}
+
+	if b.encap == nil || len(b.encapSig) != ed25519.SignatureSize {
+		return errors.New("missing ML-KEM key or signature")
+	}
+	if !ed25519.Verify(b.signingPub, b.encap.Bytes(), b.encapSig) {
+		return errors.New("invalid signature on ML-KEM key")
+	}
+
+	if b.otpk != nil {
+		if len(b.otpkSig) != ed25519.SignatureSize {
+			return errors.New("missing one-time prekey signature")
+		}
+		if !ed25519.Verify(b.signingPub, b.otpk.Bytes(), b.otpkSig) {
+			return errors.New("invalid signature on one-time prekey")
+		}
+	}
+
 	return nil
 }
 
@@ -254,6 +285,11 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, error) {
 	}
 	if !ok {
 		return nil, errors.New("bundle hash not okay")
+	}
+
+	err = bundle.verifyBundleSignatures()
+	if err != nil {
+		return nil, err
 	}
 
 	curve := ecdh.X25519()

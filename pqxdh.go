@@ -129,6 +129,55 @@ type pqxdhInit struct {
 	payload []byte
 }
 
+func NewPQXDHState(deviceID uint32) (*pqxdhState, error) {
+	signPub, signPriv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+
+	curve := ecdh.X25519()
+	ikSK, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+
+	spkSK, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	spkSig := ed25519.Sign(signPriv, spkSK.PublicKey().Bytes())
+
+	decap, err := mlkem.GenerateKey1024()
+	if err != nil {
+		return nil, err
+	}
+
+	var kemID idKEM
+	if _, err := rand.Read(kemID[:]); err != nil {
+		return nil, err
+	}
+
+	return &pqxdhState{
+		identity: pqxdhIdentity{
+			signingPub:  signPub,
+			signingPriv: signPriv,
+			pk:          ikSK.PublicKey(),
+			sk:          ikSK,
+		},
+		signedPrekeySK:     spkSK,
+		signedPrekeyPK:     spkSK.PublicKey(),
+		signedPrekeySig:    spkSig,
+		oneTimePrekeys:     make(map[uint32]*oneTimePreKey),
+		oneTimeKEMKeys:     make(map[idKEM]*oneTimeKEMKey),
+		lastResortKEMdecap: decap,
+		lastResortKEMencap: decap.EncapsulationKey(),
+		lastResortKEMid:    kemID,
+		deviceID:           deviceID,
+		version:            pqxdhV1,
+		createdAt:          time.Now().Unix(),
+	}, nil
+}
+
 func (ps *pqxdhState) generateOneTimeKEMKeys(n int) error {
 	for range n {
 		decap, err := mlkem.GenerateKey1024()
@@ -410,7 +459,7 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, *pqxdhInit, erro
 		}
 	}
 
-	ct, pqSS := bundle.encap.Encapsulate()
+	pqSS, ct := bundle.encap.Encapsulate()
 
 	var km []byte
 	km = append(km, dh1...)
@@ -488,6 +537,11 @@ func (ps *pqxdhState) recvKeyExchange(init *pqxdhInit) (*pqxdhResult, error) {
 	decap, encap, err := ps.findKEM(init.targetEncapID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find used KEM key: %s", err)
+	}
+
+	if len(init.encapCT) != mlkem.CiphertextSize1024 {
+		return nil, fmt.Errorf("bad KEM ciphertext: got %d, want %d",
+			len(init.encapCT), mlkem.CiphertextSize1024)
 	}
 
 	var otpk *oneTimePreKey

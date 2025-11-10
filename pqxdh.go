@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+const protocolInfo = "PCH_CURVE25519_SHA-512_CRYSTALS-KYBER-1024"
+
 // pqxdhVersion has a version for backwards compatibility and proper versioning
 type pqxdhVersion uint8
 
@@ -190,7 +192,7 @@ func (ps *pqxdhState) generateOneTimePrekeys(n int) error {
 func (b *pqxdhBundle) isHashValid() (bool, error) {
 	got, err := b.hash()
 	if err != nil {
-		return false, nil
+		return false, err
 	}
 
 	return bytes.Equal(got, b.bundleHash), nil
@@ -326,15 +328,27 @@ func (b *pqxdhBundle) verifyBundleSignatures() error {
 	return nil
 }
 
-func (ps *pqxdhState) additionalData(bundle *pqxdhBundle) []byte {
+func (ps *pqxdhState) additionalDataAsInitiator(bundle *pqxdhBundle) []byte {
 	ad := make([]byte, 0, 32*2+mlkem.EncapsulationKeySize1024)
 	ad = append(ad, ps.identity.pk.Bytes()...) // IK_A
 	ad = append(ad, bundle.idpk.Bytes()...)    // IK_B
 
-	ad = append(ad, bundle.encap.Bytes()...) // EncodeKEM(PQPK_B)
-
-	// Nice extra: also bind the bundle you used
+	ad = append(ad, bundle.encap.Bytes()...) // PQPK_B
 	ad = append(ad, bundle.bundleHash...)
+	return ad
+}
+
+func (ps *pqxdhState) additionalDataAsReceiver(
+	encap *mlkem.EncapsulationKey1024,
+	idpk *ecdh.PublicKey,
+	bundleHash []byte,
+) []byte {
+	ad := make([]byte, 0, 32*2+mlkem.EncapsulationKeySize1024+len(bundleHash))
+	ad = append(ad, idpk.Bytes()...)           // IK_A
+	ad = append(ad, ps.identity.pk.Bytes()...) // IK_B
+	ad = append(ad, encap.Bytes()...)          // PQPK_B
+	ad = append(ad, bundleHash...)
+
 	return ad
 }
 
@@ -407,7 +421,7 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, *pqxdhInit, erro
 	}
 	km = append(km, pqSS...)
 
-	rootKey, err := pqxdhKDF(km, "PCH_CURVE25519_SHA-512_CRYSTALS-KYBER-1024")
+	rootKey, err := pqxdhKDF(km, protocolInfo)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -415,7 +429,7 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, *pqxdhInit, erro
 	initContent := &pqxdhInit{
 		// hash of the bundle that alice used to derive the shared secret
 		bundleHash:    bhash,
-		ad:            ps.additionalData(bundle),
+		ad:            ps.additionalDataAsInitiator(bundle),
 		idpk:          ps.identity.pk,
 		targetEncapID: bundle.encapID,
 		encapCT:       ct,
@@ -431,7 +445,12 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, *pqxdhInit, erro
 
 // checkBundleAsReceiver calculates the bundle hash based on what alice has used. it will also
 // be added into the additional information so it needs to match.
-func (ps *pqxdhState) checkBundleAsReceiver(usedBundleHash []byte, kemUsed *mlkem.EncapsulationKey1024, kemID idKEM, otpkID *uint32, otpk *oneTimePreKey) ([]byte, error) {
+func (ps *pqxdhState) checkBundleAsReceiver(
+	usedBundleHash []byte,
+	kemUsed *mlkem.EncapsulationKey1024,
+	kemID idKEM, otpkID *uint32,
+	otpk *oneTimePreKey,
+) ([]byte, error) {
 	bundle, err := ps.makeBundle(kemID, kemUsed, otpkID, otpk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct bundle: %s", err)
@@ -449,13 +468,26 @@ func (ps *pqxdhState) checkBundleAsReceiver(usedBundleHash []byte, kemUsed *mlke
 	return hash, nil
 }
 
-func (ps *pqxdhState) recvKeyExchange(init *pqxdhInit) ([]byte, error) {
+type pqxdhResult struct {
+	rootKey []byte
+	ad      []byte
+}
+
+func (ps *pqxdhState) recvKeyExchange(init *pqxdhInit) (*pqxdhResult, error) {
+	if init == nil {
+		return nil, errors.New("nil init")
+	}
+
+	if init.idpk == nil || init.ephKey == nil {
+		return nil, errors.New("init missing identity or ephemeral key")
+	}
+
 	// the function needs the decap and encap so we call it here and pass it through functions.
 	// not the cleanest approach.
 	// TODO: make the bundle checking a bit more sane.
 	decap, encap, err := ps.findKEM(init.targetEncapID)
 	if err != nil {
-		return fmt.Errorf("failed to find used KEM key: %s", s)
+		return nil, fmt.Errorf("failed to find used KEM key: %s", err)
 	}
 
 	var otpk *oneTimePreKey
@@ -471,9 +503,77 @@ func (ps *pqxdhState) recvKeyExchange(init *pqxdhInit) ([]byte, error) {
 		return nil, err
 	}
 
-	// calculate dh4
-	if otpk != nil {
+	dh1, err := ps.signedPrekeySK.ECDH(init.idpk)
+	if err != nil {
+		return nil, fmt.Errorf("DH1 SPK_BxIK_A failed: %w", err)
 	}
 
-	return nil, nil
+	dh2, err := ps.identity.sk.ECDH(init.ephKey)
+	if err != nil {
+		return nil, fmt.Errorf("DH1 IK_BxEPH failed: %w", err)
+	}
+
+	dh3, err := ps.signedPrekeySK.ECDH(init.ephKey)
+	if err != nil {
+		return nil, fmt.Errorf("DH1 SPK_BxEPH failed: %w", err)
+	}
+
+	var dh4 []byte
+	if otpk != nil {
+		dh4, err = otpk.sk.ECDH(init.ephKey)
+		if err != nil {
+			return nil, fmt.Errorf("DH1 OTPKxEPH failed: %w", err)
+		}
+	}
+
+	pqSS, err := decap.Decapsulate(init.encapCT)
+	if err != nil {
+		return nil, fmt.Errorf("kem decapsulation failed: %w", err)
+	}
+
+	var km []byte
+	km = append(km, dh1...)
+	km = append(km, dh2...)
+	km = append(km, dh3...)
+	if len(dh4) > 0 {
+		km = append(km, dh4...)
+	}
+	km = append(km, pqSS...)
+
+	rootKey, err := pqxdhKDF(km, protocolInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	ps.consumeKEMIfOneTime(init.targetEncapID)
+	ps.consumeOTPKIfUsed(init.otpkUsedID)
+
+	return &pqxdhResult{
+		rootKey: rootKey,
+		ad:      ps.additionalDataAsReceiver(encap, init.idpk, bundleHash),
+	}, nil
+}
+
+func (ps *pqxdhState) consumeKEMIfOneTime(id idKEM) {
+	if id.eq(ps.lastResortKEMid) {
+		return
+	}
+
+	if k, ok := ps.oneTimeKEMKeys[id]; ok {
+		now := time.Now().Unix()
+		k.usedAt = &now
+		delete(ps.oneTimeKEMKeys, id)
+	}
+}
+
+func (ps *pqxdhState) consumeOTPKIfUsed(id *uint32) {
+	if id == nil {
+		return
+	}
+
+	if k, ok := ps.oneTimePrekeys[*id]; ok {
+		now := time.Now().Unix()
+		k.usedAt = &now
+		delete(ps.oneTimePrekeys, *id)
+	}
 }

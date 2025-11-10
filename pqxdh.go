@@ -26,6 +26,10 @@ const (
 // idKEM is a server-addressable id for a KEM key
 type idKEM [16]byte
 
+func (id idKEM) eq(other idKEM) bool {
+	return bytes.Equal(id[:], other[:])
+}
+
 // oneTimeKEMKey contains a single-use KEm key that is supposed to be used only once per pqxdh run
 // the user however has a last-resort mlkem key such that the post-quantum security is preserved
 type oneTimeKEMKey struct {
@@ -71,6 +75,7 @@ type pqxdhBundle struct {
 	encapID    idKEM                       // id to reference in init
 
 	// classical one-time (optional; server deletes after handing out)
+	otpkID  *uint32
 	otpk    *ecdh.PublicKey // optional public X25519 key
 	otpkSig []byte
 
@@ -88,8 +93,9 @@ type pqxdhState struct {
 	identity pqxdhIdentity
 
 	// classical signed prekey
-	signedPrekeySK *ecdh.PrivateKey
-	signedPrekeyPK *ecdh.PublicKey
+	signedPrekeySK  *ecdh.PrivateKey
+	signedPrekeyPK  *ecdh.PublicKey
+	signedPrekeySig []byte
 
 	// classical one-time prekeys (many; keyed by server-visible id)
 	oneTimePrekeys map[uint32]*oneTimePreKey
@@ -98,8 +104,9 @@ type pqxdhState struct {
 	oneTimeKEMKeys map[idKEM]*oneTimeKEMKey
 
 	// PQ signed prekey (last resort) secret half lives locally
-	lastResortKEMkey *mlkem.DecapsulationKey1024
-	lastResortKEMid  idKEM
+	lastResortKEMdecap *mlkem.DecapsulationKey1024
+	lastResortKEMencap *mlkem.EncapsulationKey1024
+	lastResortKEMid    idKEM
 
 	// optional: metadata
 	deviceID  uint32
@@ -108,15 +115,12 @@ type pqxdhState struct {
 }
 
 type pqxdhInit struct {
-	version    pqxdhVersion
-	bundleHash []byte // bundle hash such that bob can verify the message content.
+	bundleHash []byte
 	ad         []byte
 
-	identityKey *ecdh.PublicKey
-	ephKey      *ecdh.PublicKey
-	otpkUsedID  *uint32
-	otpkUsedPub *ecdh.PublicKey
-
+	idpk          *ecdh.PublicKey
+	ephKey        *ecdh.PublicKey
+	otpkUsedID    *uint32
 	targetEncapID idKEM
 	encapCT       []byte
 
@@ -218,6 +222,58 @@ func (b *pqxdhBundle) hash() ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
+// findKEM finds for a given id the kem key. it also checks the last resort kem key otherwise defaulting to the
+// one time kem keys. it returns an error only when nothing is found.
+func (ps *pqxdhState) findKEM(id idKEM) (*mlkem.DecapsulationKey1024, *mlkem.EncapsulationKey1024, error) {
+	if id.eq(ps.lastResortKEMid) {
+		return ps.lastResortKEMdecap, ps.lastResortKEMencap, nil
+	}
+
+	if kp, ok := ps.oneTimeKEMKeys[id]; ok {
+		return kp.decap, kp.encap, nil
+	} else {
+		return nil, nil, fmt.Errorf("kem key not found with id: %x", id)
+	}
+}
+
+func (ps *pqxdhState) findOtpk(id uint32) (*oneTimePreKey, error) {
+	if k, ok := ps.oneTimePrekeys[id]; ok {
+		return k, nil
+	}
+
+	return nil, fmt.Errorf("one time prekey id [%d] not found", id)
+}
+
+// makeBundle constructs a given bundle from a pqxdh state. It can be used for both testing and then
+// when we want as the receiver construct a bundle to check the bundle hash. the only error this will
+// return is when either kemID or otpkID are not found.
+func (ps *pqxdhState) makeBundle(encapID idKEM, encap *mlkem.EncapsulationKey1024, otpkID *uint32, otpk *oneTimePreKey) (*pqxdhBundle, error) {
+	bundle := &pqxdhBundle{
+		signingPub: ps.identity.signingPub,
+		idpk:       ps.identity.pk,
+		spkpk:      ps.signedPrekeyPK,
+		spkSig:     ps.signedPrekeySig,
+
+		version: pqxdhV1,
+	}
+
+	if otpkID != nil && otpk != nil {
+		bundle.otpkID = otpkID
+		bundle.otpk = otpk.pk
+		bundle.otpkSig = ed25519.Sign(ps.identity.signingPriv, otpk.pk.Bytes())
+	}
+
+	if encap == nil {
+		return nil, errors.New("encapsulation key is nil")
+	}
+
+	bundle.encap = encap
+	bundle.encapID = encapID
+	bundle.encapSig = ed25519.Sign(ps.identity.signingPriv, encap.Bytes())
+
+	return bundle, nil
+}
+
 func pqxdhKDF(km []byte, info string) ([]byte, error) {
 	// HKDF salt = A zero-filled byte sequence with length equal to the hash
 	// output length
@@ -270,26 +326,39 @@ func (b *pqxdhBundle) verifyBundleSignatures() error {
 	return nil
 }
 
+func (ps *pqxdhState) additionalData(bundle *pqxdhBundle) []byte {
+	ad := make([]byte, 0, 32*2+mlkem.EncapsulationKeySize1024)
+	ad = append(ad, ps.identity.pk.Bytes()...) // IK_A
+	ad = append(ad, bundle.idpk.Bytes()...)    // IK_B
+
+	ad = append(ad, bundle.encap.Bytes()...) // EncodeKEM(PQPK_B)
+
+	// Nice extra: also bind the bundle you used
+	ad = append(ad, bundle.bundleHash...)
+	return ad
+}
+
 // keyExchange consumes a bundle and returns derived secret material.
-func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, error) {
+func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, *pqxdhInit, error) {
 	if bundle == nil {
-		return nil, errors.New("nil bundle")
+		return nil, nil, errors.New("nil bundle")
 	}
 	if bundle.idpk == nil || bundle.spkpk == nil || bundle.encap == nil {
-		return nil, errors.New("bundle missing required keys")
+		return nil, nil, errors.New("bundle missing required keys")
 	}
 
-	ok, err := bundle.isHashValid()
+	bhash, err := bundle.hash()
 	if err != nil {
-		return nil, fmt.Errorf("bundle hash compute failed: %w", err)
+		return nil, nil, fmt.Errorf("bundle hash compute failed: %w", err)
 	}
-	if !ok {
-		return nil, errors.New("bundle hash not okay")
+
+	if !bytes.Equal(bhash, bundle.bundleHash) {
+		return nil, nil, errors.New("bundle hash not okay")
 	}
 
 	err = bundle.verifyBundleSignatures()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	curve := ecdh.X25519()
@@ -297,23 +366,25 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, error) {
 	// DH1 = IK_A x SPK_B
 	dh1, err := ps.identity.sk.ECDH(bundle.spkpk)
 	if err != nil {
-		return nil, fmt.Errorf("DH1 (IK_AxSPK_B) failed: %w", err)
+		return nil, nil, fmt.Errorf("DH1 (IK_AxSPK_B) failed: %w", err)
 	}
+
+	// generate the ephemeral key only used for this session
 	ephPriv, err := curve.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("ephemeral key gen failed: %w", err)
+		return nil, nil, fmt.Errorf("ephemeral key gen failed: %w", err)
 	}
 
 	// DH2 = EK_A x IK_B
 	dh2, err := ephPriv.ECDH(bundle.idpk)
 	if err != nil {
-		return nil, fmt.Errorf("DH2 (EK_AxIK_B) failed: %w", err)
+		return nil, nil, fmt.Errorf("DH2 (EK_AxIK_B) failed: %w", err)
 	}
 
 	// DH3 = EK_A x SPK_B
 	dh3, err := ephPriv.ECDH(bundle.spkpk)
 	if err != nil {
-		return nil, fmt.Errorf("DH3 (EK_AxSPK_B) failed: %w", err)
+		return nil, nil, fmt.Errorf("DH3 (EK_AxSPK_B) failed: %w", err)
 	}
 
 	// Optional DH4 = EK_A x OPK_B
@@ -321,12 +392,11 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, error) {
 	if bundle.otpk != nil {
 		dh4, err = ephPriv.ECDH(bundle.otpk)
 		if err != nil {
-			return nil, fmt.Errorf("DH4 (EK_AxOPK_B) failed: %w", err)
+			return nil, nil, fmt.Errorf("DH4 (EK_AxOPK_B) failed: %w", err)
 		}
 	}
 
 	ct, pqSS := bundle.encap.Encapsulate()
-	_ = ct
 
 	var km []byte
 	km = append(km, dh1...)
@@ -337,20 +407,73 @@ func (ps *pqxdhState) keyExchange(bundle *pqxdhBundle) ([]byte, error) {
 	}
 	km = append(km, pqSS...)
 
-	info := fmt.Sprintf("pqxdh-%d|%x", bundle.version, bundle.bundleHash)
+	rootKey, err := pqxdhKDF(km, "PCH_CURVE25519_SHA-512_CRYSTALS-KYBER-1024")
+	if err != nil {
+		return nil, nil, err
+	}
 
-	rootKey, err := pqxdhKDF(km, info)
+	initContent := &pqxdhInit{
+		// hash of the bundle that alice used to derive the shared secret
+		bundleHash:    bhash,
+		ad:            ps.additionalData(bundle),
+		idpk:          ps.identity.pk,
+		targetEncapID: bundle.encapID,
+		encapCT:       ct,
+		ephKey:        ephPriv.PublicKey(),
+	}
+
+	if bundle.otpkID != nil && bundle.otpk != nil {
+		initContent.otpkUsedID = bundle.otpkID
+	}
+
+	return rootKey, initContent, nil
+}
+
+// checkBundleAsReceiver calculates the bundle hash based on what alice has used. it will also
+// be added into the additional information so it needs to match.
+func (ps *pqxdhState) checkBundleAsReceiver(usedBundleHash []byte, kemUsed *mlkem.EncapsulationKey1024, kemID idKEM, otpkID *uint32, otpk *oneTimePreKey) ([]byte, error) {
+	bundle, err := ps.makeBundle(kemID, kemUsed, otpkID, otpk)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct bundle: %s", err)
+	}
+
+	hash, err := bundle.hash()
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate bundle hash %s", err)
+	}
+
+	if !bytes.Equal(hash, usedBundleHash) {
+		return nil, errors.New("bundle hash didn't match")
+	}
+
+	return hash, nil
+}
+
+func (ps *pqxdhState) recvKeyExchange(init *pqxdhInit) ([]byte, error) {
+	// the function needs the decap and encap so we call it here and pass it through functions.
+	// not the cleanest approach.
+	// TODO: make the bundle checking a bit more sane.
+	decap, encap, err := ps.findKEM(init.targetEncapID)
+	if err != nil {
+		return fmt.Errorf("failed to find used KEM key: %s", s)
+	}
+
+	var otpk *oneTimePreKey
+	if init.otpkUsedID != nil {
+		otpk, err = ps.findOtpk(*init.otpkUsedID)
+		if err != nil {
+			return nil, fmt.Errorf("one time private key used but not found: %s", err)
+		}
+	}
+
+	bundleHash, err := ps.checkBundleAsReceiver(init.bundleHash, encap, init.targetEncapID, init.otpkUsedID, otpk)
 	if err != nil {
 		return nil, err
 	}
 
-	return rootKey, nil
-}
-
-// buildInit prepares an init message from Alice’s side
-func buildInit(version pqxdhVersion, ad []byte) *pqxdhInit {
-	return &pqxdhInit{
-		version: version,
-		ad:      ad,
+	// calculate dh4
+	if otpk != nil {
 	}
+
+	return nil, nil
 }

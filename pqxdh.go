@@ -329,12 +329,11 @@ func pqxdhKDF(km []byte, info string) ([]byte, error) {
 	// HKDF salt = A zero-filled byte sequence with length equal to the hash
 	// output length
 	hash := sha512.New
-	keyLen := hash().Size()
-	salt := make([]byte, keyLen)
+	salt := make([]byte, 32)
 	f := slices.Repeat([]byte{0xFF}, 32)
 
 	inputKeyMaterial := append(f, km...)
-	hkdfKey, err := hkdf.Key(hash, inputKeyMaterial, salt, info, keyLen)
+	hkdfKey, err := hkdf.Key(hash, inputKeyMaterial, salt, info, 32)
 	if err != nil {
 		return nil, fmt.Errorf("hkdf.Key failed: %s", err)
 	}

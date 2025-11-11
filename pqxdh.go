@@ -16,14 +16,102 @@ import (
 	"time"
 )
 
-const protocolInfo = "PCH_CURVE25519_SHA-512_CRYSTALS-KYBER-1024"
-
 // pqxdhVersion has a version for backwards compatibility and proper versioning
 type pqxdhVersion uint8
 
 const (
+	protocolInfo = "PCH_CURVE25519_SHA-512_CRYSTALS-KYBER-1024"
+
+	tagECx25519     byte = 0x01
+	tagMLKEM1024Pub byte = 0xA3
+
 	pqxdhV1 pqxdhVersion = 1
 )
+
+var (
+	ErrTLVTruncated  = errors.New("truncated TLV")
+	ErrTLVLenOverrun = errors.New("TLV length overrun")
+	ErrTLVTrailing   = errors.New("trailing bytes after TLV")
+	ErrBadTag        = errors.New("unexpected tag")
+)
+
+func encodeTLV(tag byte, v []byte) []byte {
+	if len(v) > 0xFFFF {
+		panic("value too large for 2-byte length")
+	}
+	out := make([]byte, 1+2+len(v))
+	out[0] = tag
+	binary.BigEndian.PutUint16(out[1:3], uint16(len(v)))
+	copy(out[3:], v)
+	return out
+}
+
+func decodeTLV(b []byte) (tag byte, val []byte, rest []byte, err error) {
+	if len(b) < 3 {
+		return 0, nil, nil, ErrTLVTruncated
+	}
+	tag = b[0]
+	n := int(binary.BigEndian.Uint16(b[1:3]))
+	if len(b) < 3+n {
+		return 0, nil, nil, ErrTLVLenOverrun
+	}
+	val = b[3 : 3+n]
+	rest = b[3+n:]
+	return
+}
+
+func encodeEC(pk *ecdh.PublicKey) []byte {
+	return encodeTLV(tagECx25519, pk.Bytes())
+}
+
+func encodeKEM1024(pk *mlkem.EncapsulationKey1024) []byte {
+	return encodeTLV(tagMLKEM1024Pub, pk.Bytes())
+}
+
+func decodeECX25519(b []byte) (*ecdh.PublicKey, error) {
+	tag, val, rest, err := decodeTLV(b)
+	if err != nil {
+		return nil, err
+	}
+	if len(rest) != 0 {
+		return nil, ErrTLVTrailing
+	}
+	if tag != tagECx25519 {
+		return nil, fmt.Errorf("%w: got 0x%02x want 0x%02x", ErrBadTag, tag, tagECx25519)
+	}
+	if len(val) != 32 {
+		return nil, fmt.Errorf("bad X25519 public key length: got %d want 32", len(val))
+	}
+	pk, err := ecdh.X25519().NewPublicKey(val)
+	if err != nil {
+		return nil, fmt.Errorf("X25519 NewPublicKey: %w", err)
+	}
+	return pk, nil
+}
+
+func decodeKEM1024(b []byte) (*mlkem.EncapsulationKey1024, error) {
+	tag, val, rest, err := decodeTLV(b)
+	if err != nil {
+		return nil, err
+	}
+	if len(rest) != 0 {
+		return nil, ErrTLVTrailing
+	}
+	if tag != tagMLKEM1024Pub {
+		return nil, fmt.Errorf("%w: got 0x%02x want 0x%02x", ErrBadTag, tag, tagMLKEM1024Pub)
+	}
+	if len(val) != mlkem.EncapsulationKeySize1024 {
+		return nil, fmt.Errorf(
+			"bad ML-KEM-1024 public key length: got %d want %d",
+			len(val), mlkem.EncapsulationKeySize1024,
+		)
+	}
+	pk, err := mlkem.NewEncapsulationKey1024(val) // adjust to your mlkem API if needed
+	if err != nil {
+		return nil, fmt.Errorf("ML-KEM NewEncapsulationKey1024: %w", err)
+	}
+	return pk, nil
+}
 
 // idKEM is a server-addressable id for a KEM key
 type idKEM [16]byte

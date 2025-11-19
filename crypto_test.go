@@ -101,6 +101,7 @@ func TestX3DHWithDoubleRatchet(t *testing.T) {
 		}
 	})
 
+	// this is a comment
 	t.Run("MultipleMessagesFromAlice", func(t *testing.T) {
 		msg1, err := aliceRatchet.Send("I'm", additionalData)
 		if err != nil {

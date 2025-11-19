@@ -256,11 +256,17 @@ func (c *RPCClient) StartChat(
 
 	c.stream = stream
 
-	jq := pb.JoinRequest{Username: username}
+	joinUsername := username
+	if joinUsername == "" {
+		joinUsername = c.username
+	}
+
+	jq := pb.JoinRequest{Username: joinUsername}
 
 	if len(authChallenge) > 0 {
 		sig := ed25519.Sign(c.user.SigningKey, authChallenge)
 		jq.Signature = sig
+		fmt.Printf("join signature: %x", sig)
 	}
 
 	log.Printf("sending join message")

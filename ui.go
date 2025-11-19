@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,16 +100,35 @@ func NewChatUI(client *RPCClient, username string) (*ChatUI, error) {
 		AddItem(ui.statusBar, 1, 0, false)
 
 	newChatForm := tview.NewForm()
-	newChatForm.AddInputField("Username:", "", 30, nil, nil).
-		AddButton("Start Chat", func() {
-			username := newChatForm.GetFormItem(0).(*tview.InputField).GetText()
-			if username != "" {
-				ui.startNewChat(username)
-			}
-			ui.pages.SwitchToPage("main")
-		}).
+	usernameField := tview.NewInputField().
+		SetLabel("Username: ").
+		SetFieldWidth(30)
+
+	submitNewChat := func() {
+		username := strings.TrimSpace(usernameField.GetText())
+		if username == "" {
+			ui.showStatus("username required to start chat", tcell.ColorRed)
+			return
+		}
+
+		ui.startNewChat(username)
+		usernameField.SetText("")
+		ui.pages.SwitchToPage("main")
+		ui.app.SetFocus(ui.inputField)
+	}
+
+	usernameField.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			submitNewChat()
+		}
+	})
+
+	newChatForm.AddFormItem(usernameField).
+		AddButton("Start Chat", submitNewChat).
 		AddButton("Cancel", func() {
+			usernameField.SetText("")
 			ui.pages.SwitchToPage("main")
+			ui.app.SetFocus(ui.inputField)
 		})
 	newChatForm.SetBorder(true).
 		SetTitle("New Chat").

@@ -1,15 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"strings"
-	"time"
+	"syscall"
 
 	"github.com/nireo/pch"
 )
@@ -48,7 +47,7 @@ func main() {
 		}
 
 		storageDir := filepath.Join(homeDir, ".pch-chat")
-		if err := os.MkdirAll(storageDir, 0700); err != nil {
+		if err := os.MkdirAll(storageDir, 0o700); err != nil {
 			log.Fatalf("failed to create storage directory: %v", err)
 		}
 
@@ -68,108 +67,37 @@ func main() {
 	regctx := context.Background()
 
 	fmt.Print("registering user... ")
-	if _, err := client.Register(regctx, *username); err != nil {
-		fmt.Printf("(already registered or error: %v)\n", err)
-	} else {
-		fmt.Println("success")
+	authChallenge, err := client.Register(regctx, *username)
+	if err != nil {
+		log.Fatalf("failed to register user: %v", err)
 	}
-	// TODO: proper handling of auth challenge
+	fmt.Println("success")
 
 	fmt.Print("connecting to chat server... ")
-	if _, err := client.StartChat(context.Background(), *username, nil); err != nil {
+	if _, err := client.StartChat(context.Background(), *username, authChallenge); err != nil {
 		log.Fatalf("failed to start chat: %v", err)
 	}
 	fmt.Println("connected")
 
-	scanner := bufio.NewScanner(os.Stdin)
-	fmt.Print("> ")
+	ui, err := pch.NewChatUI(client, *username)
+	if err != nil {
+		log.Fatalf("failed to initialize chat UI: %v", err)
+	}
+	defer ui.Stop()
 
-	for scanner.Scan() {
-		input := strings.TrimSpace(scanner.Text())
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
 
-		if input == "" {
-			fmt.Print("> ")
-			continue
-		}
+	go func() {
+		<-sigCh
+		ui.Stop()
+	}()
 
-		parts := strings.Fields(input)
-		command := parts[0]
-
-		switch command {
-		case "chat":
-			if len(parts) < 2 {
-				fmt.Println("usage: chat <username>")
-				fmt.Print("> ")
-				continue
-			}
-			recipient := parts[1]
-
-			if !client.HasConversation(recipient) {
-				fmt.Printf("starting new chat with %s...\n", recipient)
-				if err := client.InitiateChat(context.Background(), recipient); err != nil {
-					fmt.Printf("failed to initiate chat: %v\n", err)
-					fmt.Print("> ")
-					continue
-				}
-				time.Sleep(200 * time.Millisecond)
-				fmt.Printf("chat established with %s\n", recipient)
-			} else {
-				fmt.Printf("already have chat with %s\n", recipient)
-			}
-
-		case "send", "msg", "m":
-			if len(parts) < 3 {
-				fmt.Println("usage: send <username> <message>")
-				fmt.Print("> ")
-				continue
-			}
-			recipient := parts[1]
-			message := strings.Join(parts[2:], " ")
-
-			if !client.HasConversation(recipient) {
-				fmt.Printf("no chat with %s. Use 'chat %s' first.\n", recipient, recipient)
-				fmt.Print("> ")
-				continue
-			}
-
-			if err := client.SendMessage(recipient, message); err != nil {
-				fmt.Printf("failed to send: %v\n", err)
-			} else {
-				fmt.Printf("sent to %s\n", recipient)
-			}
-
-		case "list", "ls":
-			convs := client.ListConversations()
-			if len(convs) == 0 {
-				fmt.Println("no active conversations")
-			} else {
-				fmt.Println("active conversations:")
-				for _, c := range convs {
-					fmt.Printf("- %s\n", c)
-				}
-			}
-
-		case "ping", "heartbeat":
-			if err := client.SendHeartbeat(); err != nil {
-				fmt.Printf("failed to send heartbeat: %v\n", err)
-			} else {
-				fmt.Println("heartbeat sent")
-			}
-
-		case "quit", "exit", "q":
-			fmt.Println("goodbye!")
-			return
-
-		default:
-			fmt.Printf("unknown command: %s\n", command)
-		}
-
-		fmt.Print("> ")
+	fmt.Println("launching chat interface... (press Esc to exit)")
+	if err := ui.Run(); err != nil {
+		log.Fatalf("ui error: %v", err)
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Printf("Error reading input: %v", err)
-	}
-	log.Println("Client is alive. Press Ctrl+C to quit.")
-	<-make(chan struct{})
+	fmt.Println("goodbye!")
 }

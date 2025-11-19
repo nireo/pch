@@ -62,7 +62,7 @@ func (l *LocalStore) ensureBuckets() error {
 
 // NewLocalStore creates a new local store at the given path.
 func NewLocalStore(path string) (*LocalStore, error) {
-	db, err := bolt.Open(path, 0600, nil)
+	db, err := bolt.Open(path, 0o600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func NewLocalStore(path string) (*LocalStore, error) {
 	return l, nil
 }
 
-// StoreOTP stores a map of otps in the local store.
+// StoreOTPs stores a map of otps in the local store.
 func (l *LocalStore) StoreOTPs(otps map[[32]byte][]byte) error {
 	return l.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(localOtpBucket)

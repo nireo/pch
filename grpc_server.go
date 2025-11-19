@@ -339,6 +339,7 @@ func (r *RpcServer) handleJoinMessage(jreq *pb.JoinRequest, ctx *streamContext) 
 		return fmt.Errorf("user not found: %v", err)
 	}
 
+	fmt.Printf("user verifying key: %x\nsignature: %x", userRecord.VerifyingKey, jreq.Signature)
 	if !ed25519.Verify(userRecord.VerifyingKey, chall.challenge[:], jreq.Signature) {
 		r.logger.Error().Str("username", username).Msg("invalid challenge signature")
 		return fmt.Errorf("invalid challenge signature")

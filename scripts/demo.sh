@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launches a demo setup with server + two clients (alice/bob) in separate tmux windows.
+# Launches a demo setup with server + two simple CLI clients (alice/bob) in separate tmux windows.
 # Cleans up temp data and the tmux session on exit.
 
 set -euo pipefail
@@ -30,11 +30,11 @@ tmux new-session -d -s "$SESSION" -c "$ROOT_DIR" \
 
 # Alice client
 tmux new-window -t "$SESSION" -n "alice" -c "$ROOT_DIR" \
-  "go run ./cmd/client -username alice -server \"localhost:$PORT\" -storage \"$WORKDIR/alice.db\""
+  "go run ./cmd/simple -username alice -server \"localhost:$PORT\" -storage \"$WORKDIR/alice.db\""
 
 # Bob client
 tmux new-window -t "$SESSION" -n "bob" -c "$ROOT_DIR" \
-  "go run ./cmd/client -username bob -server \"localhost:$PORT\" -storage \"$WORKDIR/bob.db\""
+  "go run ./cmd/simple -username bob -server \"localhost:$PORT\" -storage \"$WORKDIR/bob.db\""
 
 tmux select-window -t "$SESSION:alice"
 

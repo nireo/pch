@@ -41,6 +41,16 @@ type RPCClient struct {
 	onMessageReceived func(from, message string)
 }
 
+// LocalStore exposes the backing message store for UI consumption.
+func (c *RPCClient) LocalStore() MessageStore {
+	return c.localStore
+}
+
+// SetOnMessageReceived sets the callback for newly received plaintext messages.
+func (c *RPCClient) SetOnMessageReceived(fn func(from, message string)) {
+	c.onMessageReceived = fn
+}
+
 // NewRpcClient creates a new gRPC client connected to the specified address.
 func NewRpcClient(addr string, username string, localStorePath string) (*RPCClient, error) {
 	kacp := keepalive.ClientParameters{
@@ -407,6 +417,9 @@ func (c *RPCClient) handleEncryptedMessage(msg *pb.EncryptedMessage) {
 	// log the message for testing purposes
 	if c.onMessageReceived != nil {
 		c.onMessageReceived(msg.SenderId, plaintext)
+	} else {
+		// Only print to stdout if no UI handler is installed to avoid corrupting TUI layout.
+		fmt.Printf("[%s]: %s\n", msg.SenderId, plaintext)
 	}
 
 	// after the encryption we need to plaintext mainly for performance reasons and we work under
@@ -420,8 +433,6 @@ func (c *RPCClient) handleEncryptedMessage(msg *pb.EncryptedMessage) {
 		log.Printf("failed to store message locally: %s", err)
 		return
 	}
-
-	fmt.Printf("[%s]: %s\n", msg.SenderId, plaintext)
 }
 
 // SendMessage sends an encrypted message to the specified recipient.
